@@ -1,0 +1,48 @@
+# ==============================================================================
+# Atlas Production Template — Containerized Nginx Gateway Service Block
+# ==============================================================================
+# Use this service if you run Nginx as a containerized edge gateway instead of host Nginx.
+# ==============================================================================
+
+version: "3.8"
+
+services:
+  nginx_gateway:
+    image: nginx:alpine
+    container_name: atlas_nginx_gateway
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Base Nginx configuration & snippets
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/snippets:/etc/nginx/snippets:ro
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./infra/nginx/sites-enabled:/etc/nginx/sites-enabled:ro
+
+      # ACME challenge webroot (shared with Certbot)
+      - /var/www/certbot:/var/www/certbot:ro
+
+      # Let's Encrypt certificates (read-only)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+
+      # Log directory
+      - /var/log/nginx:/var/log/nginx
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx-health 2>&1 | grep -E '200|404' >/dev/null || exit 0"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - atlas_gateway_network
+
+networks:
+  atlas_gateway_network:
+    name: atlas_gateway_network
+    driver: bridge

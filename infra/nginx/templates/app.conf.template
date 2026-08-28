@@ -1,0 +1,79 @@
+# ==============================================================================
+# Atlas Production Template — Virtual Host Template for Applications (Hardened)
+# ==============================================================================
+# Usage:
+#   1. Copy this template to /etc/nginx/sites-available/APP_NAME.conf
+#   2. Replace placeholders:
+#      - {{DOMAIN_NAMES}}       -> e.g. example.com www.example.com
+#      - {{PRIMARY_DOMAIN}}     -> e.g. example.com
+#      - {{UPSTREAM_WEB}}       -> e.g. 127.0.0.1:3000 (or internal container name)
+#      - {{UPSTREAM_API}}       -> e.g. 127.0.0.1:4000 (optional, if separate API)
+#   3. Enable site: ln -s /etc/nginx/sites-available/APP_NAME.conf /etc/nginx/sites-enabled/
+#   4. Test & reload: nginx -t && nginx -s reload
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# HTTP Server (Port 80) — ACME Challenge & Permanent HTTPS Redirect
+# ------------------------------------------------------------------------------
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{DOMAIN_NAMES}};
+
+    # Let's Encrypt ACME challenge directory
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        try_files $uri =404;
+    }
+
+    # Redirect all other HTTP traffic to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ------------------------------------------------------------------------------
+# HTTPS Server (Port 443) — TLS Termination & Application Reverse Proxy
+# ------------------------------------------------------------------------------
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name {{DOMAIN_NAMES}};
+
+    # SSL Certificates (Managed by Let's Encrypt / scripts/setup-ssl.sh)
+    ssl_certificate /etc/letsencrypt/live/{{PRIMARY_DOMAIN}}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{PRIMARY_DOMAIN}}/privkey.pem;
+
+    # Shared Security & SSL Configurations
+    include /etc/nginx/snippets/ssl-params.conf;
+    include /etc/nginx/snippets/security-headers.conf;
+
+    # Custom Error Pages (optional)
+    error_page 502 503 504 /50x.html;
+    location = /50x.html {
+        root /var/www/html;
+        internal;
+    }
+
+    # API Routes (Optional separate backend upstream)
+    location /api/ {
+        include /etc/nginx/snippets/proxy-params.conf;
+        # Re-include security headers in location block if adding custom response headers
+        include /etc/nginx/snippets/security-headers.conf;
+        proxy_pass http://{{UPSTREAM_API}};
+    }
+
+    # WebSocket / Socket.io Endpoints (if applicable)
+    location /socket.io/ {
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_pass http://{{UPSTREAM_API}};
+    }
+
+    # Frontend / Root Application Proxy
+    location / {
+        include /etc/nginx/snippets/proxy-params.conf;
+        include /etc/nginx/snippets/security-headers.conf;
+        proxy_pass http://{{UPSTREAM_WEB}};
+    }
+}

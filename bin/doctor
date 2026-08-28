@@ -1,0 +1,412 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Atlas Production Template — Production Doctor Diagnostic Tool
+# ==============================================================================
+# Comprehensive, read-only health and security diagnostic for Atlas production hosts.
+#
+# Usage:
+#   ./bin/doctor
+#   ./bin/doctor --app=myapp
+#   ./bin/doctor --config=config/apps.yml
+# ==============================================================================
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ATLAS_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# shellcheck source=scripts/lib/common.sh
+source "${ATLAS_ROOT}/scripts/lib/common.sh"
+
+SPECIFIC_APP=""
+CUSTOM_CONFIG=""
+VERBOSE=false
+
+print_usage() {
+  cat << EOF
+Atlas Production Doctor (V1)
+Read-only diagnostic audit for system, Docker, Nginx, security, backups, and applications.
+
+Usage:
+  $(basename "$0") [options]
+
+Options:
+  -a, --app=APP_NAME      Audit a specific registered application only
+  -c, --config=PATH       Path to custom apps.yml configuration file
+  -v, --verbose           Show detailed diagnostic information
+  -h, --help              Show this help message
+
+Exit Codes:
+  0 = All checks passed (or warnings only)
+  1 = One or more critical checks failed
+  2 = Invalid configuration or usage error
+EOF
+}
+
+# Parse options
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -a=*|--app=*)
+      SPECIFIC_APP="${1#*=}"
+      shift
+      ;;
+    -a|--app)
+      if [ -z "${2:-}" ]; then log_error "Option --app requires an argument"; exit 2; fi
+      SPECIFIC_APP="$2"
+      shift 2
+      ;;
+    -c=*|--config=*)
+      CUSTOM_CONFIG="${1#*=}"
+      shift
+      ;;
+    -c|--config)
+      if [ -z "${2:-}" ]; then log_error "Option --config requires an argument"; exit 2; fi
+      CUSTOM_CONFIG="$2"
+      shift 2
+      ;;
+    --offsite|--preflight)
+      exec "${ATLAS_ROOT}/bin/production-preflight" "$@"
+      ;;
+    -v|--verbose)
+      VERBOSE=true
+      shift
+      ;;
+    -h|--help)
+      print_usage
+      exit 0
+      ;;
+    *)
+      log_error "Unknown option: $1"
+      print_usage
+      exit 2
+      ;;
+  esac
+done
+
+if [ -n "${CUSTOM_CONFIG}" ]; then
+  if [ ! -f "${CUSTOM_CONFIG}" ]; then
+    log_error "Specified config file does not exist: ${CUSTOM_CONFIG}"
+    exit 1
+  fi
+  export ATLAS_CONFIG_FILE="${CUSTOM_CONFIG}"
+fi
+
+TOTAL_PASS=0
+TOTAL_WARN=0
+TOTAL_FAIL=0
+
+record_pass() {
+  log_pass "$1"
+  TOTAL_PASS=$((TOTAL_PASS + 1))
+}
+
+record_warn() {
+  log_warning_badge "$1"
+  TOTAL_WARN=$((TOTAL_WARN + 1))
+}
+
+record_fail() {
+  log_fail_badge "$1"
+  TOTAL_FAIL=$((TOTAL_FAIL + 1))
+}
+
+print_header() {
+  printf "\n%b%s%b\n" "${COLOR_BOLD}${COLOR_BLUE}" "==================================================" "${COLOR_RESET}"
+  printf "%b  %s%b\n" "${COLOR_BOLD}" "$1" "${COLOR_RESET}"
+  printf "%b%s%b\n" "${COLOR_BOLD}${COLOR_BLUE}" "==================================================" "${COLOR_RESET}"
+}
+
+printf "\n%b==================================================%b\n" "${COLOR_BOLD}${COLOR_CYAN}" "${COLOR_RESET}"
+printf "%b             ATLAS PRODUCTION DOCTOR V1           %b\n" "${COLOR_BOLD}${COLOR_CYAN}" "${COLOR_RESET}"
+printf "%b==================================================%b\n" "${COLOR_BOLD}${COLOR_CYAN}" "${COLOR_RESET}"
+printf "Timestamp: %s\n" "$(iso_timestamp)"
+printf "Host:      %s\n" "$(hostname 2>/dev/null || echo "localhost")"
+
+# ==============================================================================
+# SECTION 1: SYSTEM & OS
+# ==============================================================================
+print_header "1. SYSTEM & HARDWARE"
+
+OS_NAME="$(uname -s 2>/dev/null || echo "Unknown")"
+KERNEL="$(uname -r 2>/dev/null || echo "Unknown")"
+ARCH="$(uname -m 2>/dev/null || echo "Unknown")"
+
+if [ -f "/etc/os-release" ]; then
+  # shellcheck disable=SC1091
+  source /etc/os-release 2>/dev/null || true
+  PRETTY_OS="${PRETTY_NAME:-$OS_NAME}"
+else
+  PRETTY_OS="$OS_NAME ($ARCH)"
+fi
+
+record_pass "Operating System: ${PRETTY_OS} (Kernel: ${KERNEL})"
+
+# CPU count
+if command -v nproc >/dev/null 2>&1; then
+  CPUS="$(nproc)"
+elif command -v sysctl >/dev/null 2>&1; then
+  CPUS="$(sysctl -n hw.ncpu 2>/dev/null || echo "1")"
+else
+  CPUS="1"
+fi
+record_pass "CPU Cores: ${CPUS}"
+
+# Memory & Swap inspection
+if command -v free >/dev/null 2>&1; then
+  TOTAL_MEM="$(free -h | awk '/^Mem:/ {print $2}')"
+  AVAIL_MEM="$(free -h | awk '/^Mem:/ {print $7}')"
+  USED_SWAP="$(free -h | awk '/^Swap:/ {print $3}')"
+  TOTAL_SWAP="$(free -h | awk '/^Swap:/ {print $2}')"
+  
+  record_pass "Memory: ${AVAIL_MEM} available / ${TOTAL_MEM} total"
+  
+  # Swap warning if swap is > 50% utilized
+  if [ -n "${TOTAL_SWAP}" ] && [ "${TOTAL_SWAP}" != "0B" ]; then
+    record_pass "Swap: ${USED_SWAP} used / ${TOTAL_SWAP} total"
+  else
+    record_warn "No active swap partition detected"
+  fi
+else
+  record_pass "Memory inspection tool (free) not available on this platform"
+fi
+
+# Disk Capacity & Free Space
+if command -v df >/dev/null 2>&1; then
+  # Check root filesystem /
+  DISK_INFO="$(df -h / 2>/dev/null | awk 'NR==2 {print $2, $3, $4, $5}')"
+  DISK_TOTAL="$(echo "${DISK_INFO}" | awk '{print $1}')"
+  DISK_USED="$(echo "${DISK_INFO}" | awk '{print $2}')"
+  DISK_AVAIL="$(echo "${DISK_INFO}" | awk '{print $3}')"
+  DISK_USE_PCT="$(echo "${DISK_INFO}" | awk '{print $4}' | tr -d '%')"
+  
+  if [ -n "${DISK_USE_PCT}" ] && [ "${DISK_USE_PCT}" -gt 85 ]; then
+    record_fail "Disk usage critical: ${DISK_USED}/${DISK_TOTAL} (${DISK_USE_PCT}% used, ${DISK_AVAIL} free)"
+  elif [ -n "${DISK_USE_PCT}" ] && [ "${DISK_USE_PCT}" -gt 75 ]; then
+    record_warn "Disk usage high: ${DISK_USED}/${DISK_TOTAL} (${DISK_USE_PCT}% used, ${DISK_AVAIL} free)"
+  else
+    record_pass "Disk storage healthy: ${DISK_USED}/${DISK_TOTAL} (${DISK_USE_PCT:-0}% used, ${DISK_AVAIL} available)"
+  fi
+fi
+
+# ==============================================================================
+# SECTION 2: DOCKER RUNTIME
+# ==============================================================================
+print_header "2. DOCKER ENGINE & CONTAINERS"
+
+if command -v docker >/dev/null 2>&1; then
+  DOCKER_VER="$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo "unknown")"
+  if [ "${DOCKER_VER}" != "unknown" ]; then
+    record_pass "Docker Engine active (Version: ${DOCKER_VER})"
+  else
+    record_fail "Docker daemon is not running or socket is inaccessible"
+  fi
+  
+  # Compose check
+  if docker compose version >/dev/null 2>&1; then
+    COMPOSE_VER="$(docker compose version --short 2>/dev/null || echo "v2")"
+    record_pass "Docker Compose active (${COMPOSE_VER})"
+  else
+    record_fail "Docker Compose v2 plugin is missing"
+  fi
+  
+  # Check unhealthy containers
+  if [ "${DOCKER_VER}" != "unknown" ]; then
+    UNHEALTHY="$(docker ps --filter "health=unhealthy" --format '{{.Names}}' 2>/dev/null || true)"
+    if [ -n "${UNHEALTHY}" ]; then
+      record_fail "Unhealthy containers found: ${UNHEALTHY}"
+    else
+      record_pass "No unhealthy Docker containers detected"
+    fi
+    
+    RUNNING_COUNT="$(docker ps -q 2>/dev/null | wc -l | tr -d ' ')"
+    record_pass "Running containers: ${RUNNING_COUNT}"
+  fi
+else
+  record_fail "Docker is not installed or not in PATH"
+fi
+
+# ==============================================================================
+# SECTION 3: NGINX GATEWAY
+# ==============================================================================
+print_header "3. NGINX REVERSE PROXY & GATEWAY"
+
+if command -v nginx >/dev/null 2>&1; then
+  NGINX_VER="$(nginx -v 2>&1 | cut -d/ -f2 || echo "installed")"
+  record_pass "Host Nginx installed (${NGINX_VER})"
+  
+  if nginx -t >/dev/null 2>&1; then
+    record_pass "Nginx configuration syntax is VALID (nginx -t)"
+  else
+    record_fail "Nginx configuration syntax test FAILED"
+  fi
+  
+  if systemctl is-active --quiet nginx 2>/dev/null; then
+    record_pass "Host Nginx service is ACTIVE (running)"
+  else
+    # Check if Nginx runs as a Docker container instead
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qi "nginx"; then
+      CONTAINER_NGINX="$(docker ps --format '{{.Names}}' | grep -i "nginx" | head -n 1)"
+      record_pass "Nginx running in Docker container: '${CONTAINER_NGINX}'"
+    else
+      record_warn "Host Nginx service is inactive and no Docker Nginx container detected"
+    fi
+  fi
+elif docker ps --format '{{.Names}}' 2>/dev/null | grep -qi "nginx"; then
+  CONTAINER_NGINX="$(docker ps --format '{{.Names}}' | grep -i "nginx" | head -n 1)"
+  record_pass "Nginx running in Docker container: '${CONTAINER_NGINX}'"
+else
+  record_warn "Nginx binary not installed on host (may run in container or separate ingress)"
+fi
+
+# ==============================================================================
+# SECTION 4: SECURITY AUDIT
+# ==============================================================================
+print_header "4. HOST SECURITY CONFIGURATION"
+
+# SSH Configuration Check
+if [ -f "/etc/ssh/sshd_config" ]; then
+  # Check PasswordAuthentication
+  PASS_AUTH="$(grep -E "^PasswordAuthentication" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null | tail -n 1 | awk '{print $2}' || echo "unknown")"
+  if [ "${PASS_AUTH}" = "no" ]; then
+    record_pass "SSH Password Authentication is DISABLED (Key-only)"
+  elif [ "${PASS_AUTH}" = "yes" ]; then
+    record_fail "SSH Password Authentication is ENABLED (Vulnerable to brute force)"
+  else
+    record_warn "SSH Password Authentication state is ambiguous (${PASS_AUTH})"
+  fi
+  
+  # Check PermitRootLogin
+  ROOT_LOGIN="$(grep -E "^PermitRootLogin" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null | tail -n 1 | awk '{print $2}' || echo "unknown")"
+  if [ "${ROOT_LOGIN}" = "prohibit-password" ] || [ "${ROOT_LOGIN}" = "no" ]; then
+    record_pass "SSH Root Login is restricted (${ROOT_LOGIN})"
+  elif [ "${ROOT_LOGIN}" = "yes" ]; then
+    record_fail "SSH Root Login with password is PERMITTED (PermitRootLogin yes)"
+  else
+    record_warn "SSH PermitRootLogin state: ${ROOT_LOGIN:-unset}"
+  fi
+fi
+
+# Firewall Status (UFW)
+if command -v ufw >/dev/null 2>&1; then
+  UFW_STATUS="$(ufw status 2>/dev/null | grep "Status:" | awk '{print $2}' || echo "unknown")"
+  if [ "${UFW_STATUS}" = "active" ]; then
+    record_pass "UFW Firewall is ACTIVE"
+  else
+    record_warn "UFW Firewall is INACTIVE or not enforcing"
+  fi
+fi
+
+# ==============================================================================
+# SECTION 5: BACKUP INTEGRITY
+# ==============================================================================
+print_header "5. BACKUPS & DATA PROTECTION"
+
+BACKUP_STORAGE="/var/backups"
+if [ -d "${BACKUP_STORAGE}" ]; then
+  record_pass "Backup directory exists: ${BACKUP_STORAGE}"
+  
+  # Check for backups of registered apps
+  APPS_TO_CHECK="$(list_registered_apps || true)"
+  if [ -n "${APPS_TO_CHECK}" ]; then
+    for app in ${APPS_TO_CHECK}; do
+      if [ -n "${SPECIFIC_APP}" ] && [ "${app}" != "${SPECIFIC_APP}" ]; then
+        continue
+      fi
+      
+      APP_BK_DIR="${BACKUP_STORAGE}/${app}"
+      if [ -d "${APP_BK_DIR}" ]; then
+        LATEST_BACKUP="$(find "${APP_BK_DIR}" -type f -name "${app}-*.sql.gz" | sort -r | head -n 1 || true)"
+        if [ -n "${LATEST_BACKUP}" ]; then
+          BK_SIZE="$(du -sh "${LATEST_BACKUP}" | cut -f1)"
+          
+          # Check age of backup
+          if [ -f "${LATEST_BACKUP}" ]; then
+            # Verify gzip integrity
+            if gzip -t "${LATEST_BACKUP}" 2>/dev/null; then
+              record_pass "App '${app}' latest backup: $(basename "${LATEST_BACKUP}") (${BK_SIZE}, gzip: OK)"
+            else
+              record_fail "App '${app}' latest backup failed gzip test: $(basename "${LATEST_BACKUP}")"
+            fi
+            
+            # Verify checksum if present
+            if [ -f "${LATEST_BACKUP}.sha256" ]; then
+              EXP_SUM="$(cut -d' ' -f1 < "${LATEST_BACKUP}.sha256")"
+              ACT_SUM="$(sha256sum "${LATEST_BACKUP}" | cut -d' ' -f1)"
+              if [ "${EXP_SUM}" = "${ACT_SUM}" ]; then
+                record_pass "App '${app}' backup SHA-256 verified (${ACT_SUM:0:10}...)"
+              else
+                record_fail "App '${app}' backup SHA-256 MISMATCH"
+              fi
+            fi
+          fi
+        else
+          DB_BACKUP_REQ="$(get_app_property "${app}" "database.backup")"
+          if [ "${DB_BACKUP_REQ}" = "true" ]; then
+            record_warn "App '${app}' has backup enabled in apps.yml but no backup archives found in ${APP_BK_DIR}"
+          fi
+        fi
+      fi
+    done
+  fi
+else
+  record_warn "Global backup directory '${BACKUP_STORAGE}' does not exist"
+fi
+
+# ==============================================================================
+# SECTION 6: APPLICATION REGISTRY & HEALTH
+# ==============================================================================
+print_header "6. APPLICATION REGISTRY & HEALTH"
+
+CONFIG_FILE="$(find_apps_config || true)"
+if [ -n "${CONFIG_FILE}" ] && [ -f "${CONFIG_FILE}" ]; then
+  record_pass "Registry configuration loaded from: ${CONFIG_FILE}"
+  
+  REGISTERED_APPS="$(list_registered_apps || true)"
+  if [ -n "${REGISTERED_APPS}" ]; then
+    for app in ${REGISTERED_APPS}; do
+      if [ -n "${SPECIFIC_APP}" ] && [ "${app}" != "${SPECIFIC_APP}" ]; then
+        continue
+      fi
+      
+      APP_DIR="$(get_app_property "${app}" "directory")"
+      if [ -d "${APP_DIR}" ]; then
+        record_pass "App '${app}' workspace directory exists: ${APP_DIR}"
+      else
+        record_warn "App '${app}' workspace directory not found: ${APP_DIR}"
+      fi
+      
+      # Health check probe via health-check.sh
+      if [ -x "${ATLAS_ROOT}/scripts/health-check.sh" ]; then
+        if "${ATLAS_ROOT}/scripts/health-check.sh" --app="${app}" --retries=1 --timeout=2 >/dev/null 2>&1; then
+          record_pass "App '${app}' health check: PASSED"
+        else
+          record_warn "App '${app}' health check: PROBE RETURNED NON-ZERO (Service may be down or unconfigured)"
+        fi
+      fi
+    done
+  else
+    record_warn "No applications defined under 'apps' in registry configuration"
+  fi
+else
+  record_fail "No apps.yml or apps.example.yml found in ${ATLAS_ROOT}/config/"
+fi
+
+# ==============================================================================
+# DOCTOR SUMMARY & FINAL EXIT CODE
+# ==============================================================================
+printf "\n%b==================================================%b\n" "${COLOR_BOLD}${COLOR_CYAN}" "${COLOR_RESET}"
+printf "%b                     SUMMARY                      %b\n" "${COLOR_BOLD}" "${COLOR_RESET}"
+printf "%b==================================================%b\n" "${COLOR_BOLD}${COLOR_CYAN}" "${COLOR_RESET}"
+printf "Passed Checks:   %b%d%b\n" "${COLOR_GREEN}" "${TOTAL_PASS}" "${COLOR_RESET}"
+printf "Warnings:        %b%d%b\n" "${COLOR_YELLOW}" "${TOTAL_WARN}" "${COLOR_RESET}"
+printf "Failures:        %b%d%b\n" "${COLOR_RED}" "${TOTAL_FAIL}" "${COLOR_RESET}"
+printf "%s\n" "--------------------------------------------------"
+
+if [ "${TOTAL_FAIL}" -eq 0 ] && [ "${TOTAL_WARN}" -eq 0 ]; then
+  printf "%bRESULT: PASS (Host and services in optimal condition)%b\n\n" "${COLOR_BOLD}${COLOR_GREEN}" "${COLOR_RESET}"
+  exit 0
+elif [ "${TOTAL_FAIL}" -eq 0 ]; then
+  printf "%bRESULT: PASS WITH WARNINGS (Action recommended for warnings above)%b\n\n" "${COLOR_BOLD}${COLOR_YELLOW}" "${COLOR_RESET}"
+  exit 0
+else
+  printf "%bRESULT: FAIL (%d critical failure(s) require immediate attention)%b\n\n" "${COLOR_BOLD}${COLOR_RED}" "${TOTAL_FAIL}" "${COLOR_RESET}"
+  exit 1
+fi

@@ -1,0 +1,114 @@
+# ==============================================================================
+# Atlas Production Template — Application Registry Configuration
+# ==============================================================================
+# Copy this file to config/apps.yml to define applications managed by Atlas.
+# Atlas uses this declarative registry to manage deployments, health checks,
+# backups, and Nginx reverse proxy configurations without hardcoded application logic.
+# ==============================================================================
+
+version: "1.0"
+
+apps:
+  # Example 1: Full-Stack Web Application with PostgreSQL & Redis
+  example-app:
+    name: "Example Full-Stack Web Application"
+    directory: "/var/www/example-app"
+    compose_file: "docker-compose.yml"
+
+    # Domains routed through Atlas Nginx reverse proxy
+    domains:
+      - "example.com"
+      - "www.example.com"
+
+    # Services monitored for availability and health
+    services:
+      web:
+        container: "example_web"
+        port: 3000
+        healthcheck: "http://127.0.0.1:3000/health"
+      api:
+        container: "example_api"
+        port: 4000
+        healthcheck: "http://127.0.0.1:4000/api/v1/health"
+
+    # Database configuration & automated backup policy
+    database:
+      type: "postgres"
+      container: "example_postgres"
+      name: "example_db"
+      user: "example_user"
+      backup: true
+      retention_days: 14
+
+    # Redis cache configuration
+    redis:
+      container: "example_redis"
+      port: 6379
+      persistence: true
+
+    # Resource constraints per application workload
+    resources:
+      memory_limit: "1024M"
+      cpu_limit: "1.0"
+
+    # Deployment configuration
+    deployment:
+      strategy: "compose"
+      branch: "main"
+      auto_pull: true
+      pre_deploy_hook: ""
+      post_deploy_hook: ""
+
+  # Example 2: Lightweight API Service (Single Container, No Database)
+  example-api:
+    name: "Example Microservice API"
+    directory: "/var/www/example-api"
+    compose_file: "docker-compose.prod.yml"
+
+    domains:
+      - "api.example.com"
+
+    services:
+      api:
+        container: "example_microservice"
+        port: 8080
+        healthcheck: "http://127.0.0.1:8080/healthz"
+
+    database:
+      backup: false
+
+    resources:
+      memory_limit: "512M"
+      cpu_limit: "0.5"
+
+    deployment:
+      strategy: "compose"
+      branch: "main"
+      auto_pull: true
+
+  # Example 3: Static Frontend / Single Page Application
+  example-frontend:
+    name: "Example SPA Portal"
+    directory: "/var/www/example-frontend"
+    compose_file: "docker-compose.yml"
+
+    domains:
+      - "app.example.com"
+
+    services:
+      frontend:
+        container: "example_frontend"
+        port: 80
+        healthcheck: "http://127.0.0.1:80/"
+
+    database:
+      backup: false
+
+    resources:
+      memory_limit: "256M"
+      cpu_limit: "0.25"
+
+    deployment:
+      strategy: "compose"
+      branch: "production"
+      auto_pull: true

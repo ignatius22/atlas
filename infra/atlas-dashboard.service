@@ -1,0 +1,17 @@
+[Unit]
+Description=Atlas V1.1 Production Web Dashboard
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/atlas
+ExecStart=/opt/atlas/bin/atlas-dashboard 8888
+Restart=always
+RestartSec=5
+Environment=ATLAS_DASHBOARD_HOST=127.0.0.1
+Environment=ATLAS_DASHBOARD_PORT=8888
+
+[Install]
+WantedBy=multi-user.target

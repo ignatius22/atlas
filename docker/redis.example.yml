@@ -1,0 +1,50 @@
+# ==============================================================================
+# Atlas Production Template — Reusable Redis Cache Service Block
+# ==============================================================================
+# Copy and adapt this block into your application's docker-compose.prod.yml.
+# ==============================================================================
+
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: "${APP_NAME:-app}_redis"
+    restart: always
+    command: >
+      redis-server
+        --requirepass "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+        --appendonly yes
+        --appendfsync everysec
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"
+    volumes:
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - internal_network
+    # NOTE: Redis must NEVER be exposed publicly on port 6379 in production.
+
+volumes:
+  redis_data:
+    name: "${APP_NAME:-app}_redis_data"
+
+networks:
+  internal_network:
+    name: "${APP_NAME:-app}_network"
+    driver: bridge

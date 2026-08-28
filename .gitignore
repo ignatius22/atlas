@@ -1,0 +1,35 @@
+# ==============================================================================
+# Atlas Production Template — .gitignore
+# ==============================================================================
+
+# Environment files containing live secrets
+.env
+.env.*
+!.env.example
+
+# Live application registries containing proprietary host paths
+config/apps.yml
+config/apps.yaml
+config/backup.yml
+config/backup.yaml
+
+# Local backups and temporary archives
+/var/backups/
+backups/
+*.sql
+*.sql.gz
+*.sql.gz.sha256
+*.tar.gz
+
+# Temporary test directories and scratch files
+/tmp/
+/scratch/
+.tmp/
+*.log
+
+# Operating System & IDE Artifacts
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

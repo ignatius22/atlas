@@ -1,0 +1,55 @@
+# ==============================================================================
+# Atlas Production Template — Global Backup Configuration (V1.1)
+# ==============================================================================
+# Copy this file to config/backup.yml to customize global backup behavior.
+# Individual application backup policies can be overridden in config/apps.yml.
+# ==============================================================================
+
+version: "1.1"
+
+backup:
+  # Base directory where compressed archives and checksums are stored locally
+  storage_dir: "/var/backups"
+
+  # Default retention period (in days) before older local backups are pruned
+  default_retention_days: 14
+
+  # Compression algorithm (gzip level 9 default)
+  compression: "gzip"
+  compression_level: 9
+
+  # Cryptographic checksum algorithm (sha256 default)
+  checksum_algorithm: "sha256"
+
+  # Safety settings
+  safety:
+    require_healthy_container: true
+    verify_gzip_integrity: true
+    verify_checksum: true
+    create_pre_restore_backup: true
+
+  # Client-Side Asymmetric Encryption
+  encryption:
+    enabled: true
+    algorithm: "age" # age (recommended) or gpg
+    recipient_key: "${ATLAS_AGE_RECIPIENT}"
+
+  # Off-Site Remote Backup Sync (R2 / S3 / B2)
+  remote_storage:
+    enabled: false
+    provider: "auto" # auto | rclone | aws | local-mock
+    endpoint: "https://<account-id>.r2.cloudflarestorage.com"
+    bucket: "atlas-production-backups"
+    prefix: "atlas-backups"
+    access_key_id: "${ATLAS_S3_ACCESS_KEY}"
+    secret_access_key: "${ATLAS_S3_SECRET_KEY}"
+    remote_retention_days: 30
+
+  # Alerting & Notifications
+  notifications:
+    on_failure: true
+    on_success: false
+    discord_webhook: "${ATLAS_DISCORD_WEBHOOK}"
+    slack_webhook: "${ATLAS_SLACK_WEBHOOK}"
+    telegram_bot_token: "${ATLAS_TELEGRAM_BOT_TOKEN}"
+    telegram_chat_id: "${ATLAS_TELEGRAM_CHAT_ID}"
