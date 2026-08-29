@@ -30,6 +30,8 @@ jobs:
           pip install pyyaml
 
       - name: Run Test Suite
+        env:
+          PG_VERSION: ${{ matrix.pg-version }}
         run: |
           chmod +x bin/atlas bin/doctor scripts/*.sh tests/*.sh
           ./tests/run-all.sh

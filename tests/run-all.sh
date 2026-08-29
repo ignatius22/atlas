@@ -38,14 +38,17 @@ echo "--> [UNIT] Test 3: Generating Age keypair via CLI..."
 "${ATLAS_DIR}/bin/atlas" crypto gen-key >/dev/null
 echo "✓ Crypto keypair generation passed."
 
-# Test 4: Full Chaos DR Drill (Postgres 16 -> Dump -> Compress -> Encrypt -> Wipe -> Decrypt -> Restore)
+# Test 4: Full Chaos DR Drill (Postgres -> Dump -> Compress -> Encrypt -> Wipe -> Decrypt -> Restore)
 echo "--> [CHAOS DR] Test 4: Executing End-to-End PostgreSQL Backup, Encryption, and Ephemeral Recovery..."
 
 PG_TEST_CONTAINER="atlas_chaos_pg_$$"
+PG_VERSION="${PG_VERSION:-16}"
+
 docker run -d --name "${PG_TEST_CONTAINER}" \
+  -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=chaos_secret \
   -e POSTGRES_DB=chaos_db \
-  postgres:16-alpine >/dev/null
+  "postgres:${PG_VERSION}-alpine" >/dev/null
 
 for i in {1..30}; do
   if docker exec "${PG_TEST_CONTAINER}" pg_isready -U postgres >/dev/null 2>&1; then
@@ -54,7 +57,7 @@ for i in {1..30}; do
   sleep 1
 done
 
-# Seed test database
+# Seed test database inside container
 docker exec -i "${PG_TEST_CONTAINER}" psql -U postgres -d chaos_db << 'SQL'
 CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100), created_at TIMESTAMP DEFAULT NOW());
 INSERT INTO users (name) VALUES ('Alice'), ('Bob'), ('Charlie'), ('David');
