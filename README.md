@@ -1,11 +1,19 @@
 # Atlas
 
-> **Zero-trust disaster recovery and infrastructure health toolkit for production Dockerized applications.**
+> **Disaster recovery verification, zero-trust backup automation, and infrastructure diagnostics for Dockerized applications.**
 
 [![Atlas CI](https://github.com/ignatius22/atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/ignatius22/atlas/actions)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-Atlas transforms standard single/multi-VPS Docker deployments into resilient, self-healing platforms. It provides automated, atomic PostgreSQL dumps, client-side asymmetric Age envelope encryption, tamper-evident checksums, off-site Cloudflare R2 / AWS S3 replication, and automated disaster-recovery drills in isolated ephemeral containers.
+Atlas transforms standard single/multi-VPS Docker deployments into resilient, self-healing platforms. It provides automated, atomic PostgreSQL dumps, client-side asymmetric Age envelope encryption, tamper-evident SHA-256 checksums, off-site S3 / Cloudflare R2 replication, and automated disaster-recovery drills in isolated ephemeral containers.
+
+---
+
+## 🎯 The Core Promise
+
+> **A backup is not trustworthy merely because it exists. Atlas verifies that it can actually be restored.**
+
+Most backup systems stop at dumping and uploading an archive. You only discover your backup is corrupt, truncated, or unreadable when a real disaster occurs. Atlas closes this loop by automatically provisioning isolated ephemeral containers, loading your schema, verifying row counts, and measuring exact Recovery Time Objectives (RTO).
 
 ---
 
@@ -18,7 +26,7 @@ cd /opt/atlas
 sudo ./scripts/install.sh
 ```
 
-### 2. Initialize
+### 2. Initialize Stack
 ```bash
 atlas init
 ```
@@ -43,27 +51,28 @@ applications:
       database: "webapp_prod"
 ```
 
-### 4. Backup, Audit & Verify
+### 4. Hero Demonstration: Backup, Replicate & Verify Recovery
 ```bash
-# Audit host and container security
+# 1. Audit host and container security
 atlas doctor
 
-# Create local atomic encrypted backup
+# 2. Create local atomic encrypted backup
 atlas backup create web-app
 
-# Replicate encrypted backup to S3/R2
+# 3. Replicate encrypted backup to S3/R2
 atlas backup sync web-app
 
-# Run an isolated ephemeral disaster recovery drill
+# 4. Run an isolated ephemeral disaster recovery drill
 atlas restore test web-app
 ```
 
 ---
 
 ## 🔒 Security Architecture
-- **Zero-Knowledge Asymmetric Encryption:** Backups are encrypted before leaving your server using an Age public recipient key (`age1...`). Even in the event of a total S3/R2 storage compromise, data cannot be decrypted without the offline private key.
+- **Client-Side Asymmetric Encryption:** Backups are encrypted before leaving your server using an Age public recipient key (`age1...`). Even if your cloud storage bucket is compromised, data cannot be decrypted without the offline private key.
 - **Atomic File Streams:** Dumps are streamed to temporary `.tmp` buffers before atomic rename, guaranteeing zero corrupted partial archives.
 - **Isolated DR Verification:** Restorations are verified by spinning up disposable Docker containers, loading the schema, verifying tables, and measuring exact Recovery Time Objectives (RTO).
+- **Strict Input Validation:** All container and application identifiers are validated against strict regex (`^[a-zA-Z0-9_-]+$`) before execution.
 
 ---
 
@@ -71,10 +80,11 @@ atlas restore test web-app
 - [Quickstart Guide](QUICKSTART.md)
 - [Installation Guide](INSTALL.md)
 - [Configuration Reference](CONFIGURATION.md)
-- [Security Model & Disclosure Policy](SECURITY.md)
 - [Disaster Recovery Runbook](RUNBOOK.md)
+- [Security Model & Disclosure Policy](SECURITY.md)
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [Architecture Deep Dive](docs/architecture.md)
+- [Commercial Roadmap & Strategy](docs/COMMERCIAL-ROADMAP.md)
 
 ---
 
