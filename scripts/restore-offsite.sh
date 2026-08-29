@@ -133,11 +133,12 @@ fi
 if [ "${TARGET_ENV}" = "test" ]; then
   log_info "Starting ephemeral test container to verify database recovery..."
   TEST_CONTAINER="atlas_verify_${APP_TARGET}_$$"
+  PG_TEST_IMG="postgres:${PG_VERSION:-16}-alpine"
   docker run -d --name "${TEST_CONTAINER}" \
     -e POSTGRES_USER=postgres \
     -e POSTGRES_PASSWORD=atlas_test \
     -e POSTGRES_DB=postgres \
-    postgres:16-alpine >/dev/null
+    "${PG_TEST_IMG}" >/dev/null
 
   for i in {1..30}; do
     if docker exec "${TEST_CONTAINER}" pg_isready -U postgres >/dev/null 2>&1; then
@@ -147,7 +148,8 @@ if [ "${TARGET_ENV}" = "test" ]; then
   done
 
   start_ts="$(date +%s%N)"
-  if ! zcat "${DECRYPTED_FILE}" | docker exec -i "${TEST_CONTAINER}" psql -U postgres -d postgres >/dev/null 2>&1; then
+  # Decompress and stream into test postgres instance (suppress non-fatal comments)
+  if ! zcat "${DECRYPTED_FILE}" | docker exec -i "${TEST_CONTAINER}" psql -U postgres -d postgres -q >/dev/null 2>&1; then
     docker rm -f "${TEST_CONTAINER}" >/dev/null 2>&1 || true
     log_error "DR drill restoration failed on test container!"
     exit 1
