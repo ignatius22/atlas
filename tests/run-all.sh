@@ -51,19 +51,19 @@ docker run -d --name "${PG_TEST_CONTAINER}" \
   "postgres:${PG_VERSION}-alpine" >/dev/null
 
 for i in {1..30}; do
-  if docker exec "${PG_TEST_CONTAINER}" pg_isready -U postgres >/dev/null 2>&1; then
+  if docker exec "${PG_TEST_CONTAINER}" pg_isready -U postgres -d chaos_db >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
 
-# Seed test database inside container
-docker exec -i "${PG_TEST_CONTAINER}" psql -U postgres -d chaos_db << 'SQL'
+# Seed test database inside container using docker exec
+docker exec -i "${PG_TEST_CONTAINER}" psql -U postgres -d chaos_db -c "
 CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100), created_at TIMESTAMP DEFAULT NOW());
 INSERT INTO users (name) VALUES ('Alice'), ('Bob'), ('Charlie'), ('David');
 CREATE TABLE orders (id SERIAL PRIMARY KEY, user_id INT, amount NUMERIC);
 INSERT INTO orders (user_id, amount) VALUES (1, 99.50), (2, 149.00), (3, 20.00);
-SQL
+"
 
 # Generate test config
 CHAOS_CONF="$(mktemp)"
