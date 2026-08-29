@@ -101,20 +101,31 @@ log_info "Retrieving encrypted archive from off-site storage for '${APP_TARGET}'
 LOCAL_ENC_FILE="${WORK_DIR}/backup.sql.gz.age"
 
 if [ "${PROVIDER}" = "local-mock" ]; then
-  latest_mock="$(find "/tmp/atlas_mock_s3/${APP_TARGET}" -name "*.age" | sort | tail -n 1)"; cp "${latest_mock}" "${LOCAL_ENC_FILE}"
+  latest_mock="$(find "/tmp/atlas_mock_s3/${APP_TARGET}" -name "*.age" 2>/dev/null | sort | tail -n 1)"
+  if [ -z "${latest_mock}" ] || [ ! -f "${latest_mock}" ]; then
+    log_error "No remote backup archives found in mock storage."
+    exit 1
+  fi
+  cp "${latest_mock}" "${LOCAL_ENC_FILE}"
 elif command -v rclone >/dev/null 2>&1; then
-  rclone copyto ":s3:${S3_BUCKET}/${APP_TARGET}/${REMOTE_FILE:-latest.age}" "${LOCAL_ENC_FILE}" \
+  if ! rclone copyto ":s3:${S3_BUCKET}/${APP_TARGET}/${REMOTE_FILE:-latest.age}" "${LOCAL_ENC_FILE}" \
     --s3-provider=Cloudflare \
     --s3-endpoint="${S3_ENDPOINT}" \
     --s3-access-key-id="${ATLAS_S3_ACCESS_KEY:-}" \
-    --s3-secret-access-key="${ATLAS_S3_SECRET_KEY:-}"
+    --s3-secret-access-key="${ATLAS_S3_SECRET_KEY:-}"; then
+    log_error "Failed to retrieve remote archive from S3/R2."
+    exit 1
+  fi
 else
-  aws s3 cp "s3://${S3_BUCKET}/${APP_TARGET}/${REMOTE_FILE:-latest.age}" "${LOCAL_ENC_FILE}" ${S3_ENDPOINT:+--endpoint-url "${S3_ENDPOINT}"}
+  if ! aws s3 cp "s3://${S3_BUCKET}/${APP_TARGET}/${REMOTE_FILE:-latest.age}" "${LOCAL_ENC_FILE}" ${S3_ENDPOINT:+--endpoint-url "${S3_ENDPOINT}"}; then
+    log_error "Failed to retrieve remote archive from AWS S3."
+    exit 1
+  fi
 fi
 
 log_info "Decrypting archive using Age identity..."
 DECRYPTED_FILE="${WORK_DIR}/backup.sql.gz"
-if ! age -d -i "${AGE_KEY_PATH}" -o "${DECRYPTED_FILE}" "${LOCAL_ENC_FILE}"; then
+if ! age -d -i "${AGE_KEY_PATH}" -o "${DECRYPTED_FILE}" "${LOCAL_ENC_FILE}" 2>/dev/null; then
   log_error "Age decryption failed! Identity key mismatch or corrupted archive."
   exit 1
 fi
@@ -136,7 +147,6 @@ if [ "${TARGET_ENV}" = "test" ]; then
   done
 
   start_ts="$(date +%s%N)"
-  # Stream into default postgres database (which is always present)
   if ! zcat "${DECRYPTED_FILE}" | docker exec -i "${TEST_CONTAINER}" psql -U postgres -d postgres >/dev/null 2>&1; then
     docker rm -f "${TEST_CONTAINER}" >/dev/null 2>&1 || true
     log_error "DR drill restoration failed on test container!"
