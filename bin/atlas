@@ -4,8 +4,15 @@
 # ==============================================================================
 set -Eeuo pipefail
 
-BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ATLAS_DIR="$(cd "${BIN_DIR}/.." && pwd)"
+# Resolve symlinks to find true installation directory
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+BIN_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+ATLAS_DIR="$(cd -P "${BIN_DIR}/.." && pwd)"
 SCRIPTS_DIR="${ATLAS_DIR}/scripts"
 
 source "${SCRIPTS_DIR}/lib/common.sh"
