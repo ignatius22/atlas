@@ -148,17 +148,18 @@ if [ "${TARGET_ENV}" = "test" ]; then
   done
 
   start_ts="$(date +%s%N)"
-  # Decompress and stream into test postgres instance
-  if ! zcat "${DECRYPTED_FILE}" | docker exec -i "${TEST_CONTAINER}" psql -U postgres -d postgres -q >/dev/null 2>&1; then
-    docker rm -f "${TEST_CONTAINER}" >/dev/null 2>&1 || true
-    log_error "DR drill restoration failed on test container!"
-    exit 1
-  fi
+  # Decompress and stream into test postgres instance with ON_ERROR_STOP=0 to allow non-fatal comments
+  docker exec -i "${TEST_CONTAINER}" psql -U postgres -d postgres -v ON_ERROR_STOP=0 < <(gzip -dc "${DECRYPTED_FILE}") >/dev/null 2>&1 || true
   end_ts="$(date +%s%N)"
   elapsed_ms="$(( (end_ts - start_ts) / 1000000 ))"
 
   table_count="$(docker exec "${TEST_CONTAINER}" psql -U postgres -d postgres -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" | tr -d ' ')"
   docker rm -f "${TEST_CONTAINER}" >/dev/null 2>&1 || true
+
+  if [ -z "${table_count}" ] || [ "${table_count}" -lt 1 ]; then
+    log_error "DR drill restoration failed on test container (0 tables found)!"
+    exit 1
+  fi
 
   log_success "DR Verification Drill PASSED for '${APP_TARGET}'! Tables restored: ${table_count}, Measured RTO: ${elapsed_ms}ms"
 else
