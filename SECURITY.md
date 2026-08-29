@@ -26,6 +26,6 @@ The Atlas maintainers take the security of backup automation, encryption, and in
 
 If you discover a security issue or vulnerability in Atlas:
 - **Do NOT open a public GitHub issue.**
-- Email the security maintainers at **security@atlasinfra.dev**.
+- Please report vulnerabilities via **GitHub Security Advisories** at https://github.com/ignatius22/atlas/security/advisories/new.
 - Provide a proof-of-concept, description of the vulnerability, and affected components.
 - We will acknowledge receipt within 48 hours and work with you on a coordinated disclosure timeline.
