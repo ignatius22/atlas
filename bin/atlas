@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Atlas V1 — Unified CLI Entrypoint
+# ==============================================================================
+set -Eeuo pipefail
+
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ATLAS_DIR="$(cd "${BIN_DIR}/.." && pwd)"
+SCRIPTS_DIR="${ATLAS_DIR}/scripts"
+
+source "${SCRIPTS_DIR}/lib/common.sh"
+
+print_help() {
+  cat << 'HELP'
+Atlas — Production Infrastructure & Disaster Recovery for Dockerized Applications
+
+Usage:
+  atlas <command> [subcommand] [options]
+
+Commands:
+  init                     Initialize Atlas configuration and Age keypair
+  config validate          Validate atlas.yml syntax and security rules
+  doctor                   Run comprehensive infrastructure and security audit
+  status                   Display cluster health, container state, and RPO status
+  version                  Display Atlas version information
+  
+  backup create [app]      Create atomic local PostgreSQL backup
+  backup sync [app]        Encrypt with Age and replicate to off-site S3/R2
+  backup list [app]        List local and off-site backup archives
+  
+  restore test [app]       Execute ephemeral isolated DR verification drill
+  restore run [app]        Restore database from local or off-site backup
+  
+  crypto gen-key           Generate a new asymmetric Age X25519 keypair
+
+Options:
+  -c, --config=PATH        Path to custom atlas.yml configuration file
+  --json                   Output results in machine-readable JSON format
+  -v, --verbose            Show verbose debug output
+  -h, --help               Show this help message
+HELP
+}
+
+if [ $# -eq 0 ]; then
+  print_help
+  exit 0
+fi
+
+CMD="$1"
+shift
+
+normalize_args() {
+  local target=""
+  local extra_args=()
+  for arg in "$@"; do
+    if [[ "${arg}" =~ ^--app= ]]; then
+      extra_args+=("${arg}")
+    elif [[ "${arg}" =~ ^- ]]; then
+      extra_args+=("${arg}")
+    elif [ -z "${target}" ]; then
+      target="${arg}"
+    else
+      extra_args+=("${arg}")
+    fi
+  done
+  if [ -n "${target}" ]; then
+    echo "--app=${target} ${extra_args[*]:-}"
+  else
+    echo "${extra_args[*]:-}"
+  fi
+}
+
+case "${CMD}" in
+  version)
+    echo "Atlas v1.0.0 (Production Engine)"
+    exit 0
+    ;;
+
+  init)
+    echo "=== Atlas V1 Initialization ==="
+    if [ ! -f "${ATLAS_DIR}/atlas.yml" ]; then
+      cp "${ATLAS_DIR}/atlas.example.yml" "${ATLAS_DIR}/atlas.yml"
+      log_success "Created atlas.yml from template."
+    else
+      log_info "atlas.yml already exists."
+    fi
+
+    if [ ! -f "${ATLAS_DIR}/.env" ]; then
+      cp "${ATLAS_DIR}/.env.example" "${ATLAS_DIR}/.env"
+      log_success "Created .env template."
+    else
+      log_info ".env already exists."
+    fi
+
+    if command -v age-keygen >/dev/null 2>&1; then
+      log_info "Generating Age encryption keypair..."
+      "${BIN_DIR}/atlas" crypto gen-key
+    else
+      log_warn "Age CLI not installed. Install age to generate keypairs."
+    fi
+    log_success "Atlas initialized successfully."
+    ;;
+
+  config)
+    SUBCMD="${1:-}"
+    shift || true
+    if [ "${SUBCMD}" = "validate" ]; then
+      CONFIG_FILE="$(get_atlas_config "${1:-}")"
+      log_info "Validating configuration at ${CONFIG_FILE}..."
+      python3 "${SCRIPTS_DIR}/lib/yaml_parser.py" "${CONFIG_FILE}" validate
+      log_success "Configuration is valid and secure."
+    else
+      log_error "Unknown config subcommand: ${SUBCMD}. Available: validate"
+      exit 1
+    fi
+    ;;
+
+  doctor)
+    "${BIN_DIR}/doctor" "$@"
+    ;;
+
+  status)
+    CONFIG_FILE="$(get_atlas_config "")"
+    python3 "${SCRIPTS_DIR}/lib/yaml_parser.py" "${CONFIG_FILE}" to_json
+    ;;
+
+  backup)
+    SUBCMD="${1:-}"
+    shift || true
+    args="$(normalize_args "$@")"
+    case "${SUBCMD}" in
+      create) eval "${SCRIPTS_DIR}/backup.sh ${args}" ;;
+      sync)   eval "${SCRIPTS_DIR}/sync-offsite.sh ${args}" ;;
+      list)   eval "${SCRIPTS_DIR}/restore-offsite.sh --list ${args}" ;;
+      *)
+        log_error "Unknown backup subcommand: ${SUBCMD}. Available: create, sync, list"
+        exit 1
+        ;;
+    esac
+    ;;
+
+  restore)
+    SUBCMD="${1:-}"
+    shift || true
+    args="$(normalize_args "$@")"
+    case "${SUBCMD}" in
+      test) eval "${SCRIPTS_DIR}/restore-offsite.sh --target=test ${args}" ;;
+      run)  eval "${SCRIPTS_DIR}/restore.sh ${args}" ;;
+      *)
+        log_error "Unknown restore subcommand: ${SUBCMD}. Available: test, run"
+        exit 1
+        ;;
+    esac
+    ;;
+
+  crypto)
+    SUBCMD="${1:-}"
+    shift || true
+    if [ "${SUBCMD}" = "gen-key" ]; then
+      if ! command -v age-keygen >/dev/null 2>&1; then
+        log_error "age-keygen is not installed."
+        exit 1
+      fi
+      KEYPAIR="$(age-keygen)"
+      PUB_KEY="$(echo "${KEYPAIR}" | grep 'public key:' | awk '{print $NF}')"
+      PRIV_KEY="$(echo "${KEYPAIR}" | grep -v '^#' | grep -v '^$')"
+      echo ""
+      echo "🔑 Generated Asymmetric Age Keypair:"
+      echo "------------------------------------------------------------"
+      echo "Public Key (Set in .env as ATLAS_AGE_RECIPIENT):"
+      echo "${PUB_KEY}"
+      echo "------------------------------------------------------------"
+      echo "Private Key (STORE SECURELY OFFLINE FOR DISASTER RECOVERY):"
+      echo "${PRIV_KEY}"
+      echo "------------------------------------------------------------"
+    else
+      log_error "Unknown crypto subcommand: ${SUBCMD}. Available: gen-key"
+      exit 1
+    fi
+    ;;
+
+  -h|--help|help)
+    print_help
+    exit 0
+    ;;
+
+  *)
+    log_error "Unknown command: ${CMD}"
+    print_help
+    exit 1
+    ;;
+esac

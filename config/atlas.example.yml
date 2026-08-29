@@ -1,0 +1,33 @@
+# ==============================================================================
+# Atlas V1 — Declarative Infrastructure & Disaster Recovery Configuration
+# ==============================================================================
+version: "1"
+
+settings:
+  backup_dir: "/var/backups"
+  default_retention_days: 14
+  compression_level: 9
+  storage_provider: "s3" # Options: s3, r2, rclone, local-mock
+  notification_webhook: ""
+
+applications:
+  web-app:
+    name: "Production Web Platform"
+    directory: "/var/www/webapp"
+    compose_file: "docker-compose.yml"
+    domains:
+      - "app.example.com"
+    services:
+      web:
+        container: "webapp_frontend"
+        healthcheck: "http://127.0.0.1:3000/api/health"
+      api:
+        container: "webapp_backend"
+        healthcheck: "http://127.0.0.1:4000/health"
+    database:
+      type: "postgres"
+      container: "webapp_postgres"
+      backup: true
+      retention_days: 14
+      user: "postgres"
+      database: "webapp_prod"
