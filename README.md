@@ -2,7 +2,7 @@
 
 > **Disaster recovery verification, zero-trust backup automation, and infrastructure diagnostics for Dockerized applications.**
 
-[![Atlas CI](https://github.com/ignatius22/atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/ignatius22/atlas/actions)
+[![Atlas CI](https://github.com/ignatius22/atlas/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ignatius22/atlas/actions)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 Atlas transforms standard single/multi-VPS Docker deployments into resilient, self-healing platforms. It provides automated, atomic PostgreSQL dumps, client-side asymmetric Age envelope encryption, tamper-evident SHA-256 checksums, off-site S3 / Cloudflare R2 replication, and automated disaster-recovery drills in isolated ephemeral containers.
