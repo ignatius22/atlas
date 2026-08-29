@@ -141,14 +141,14 @@ if [ "${TARGET_ENV}" = "test" ]; then
     "${PG_TEST_IMG}" >/dev/null
 
   for i in {1..30}; do
-    if docker exec "${TEST_CONTAINER}" pg_isready -U postgres >/dev/null 2>&1; then
+    if docker exec "${TEST_CONTAINER}" psql -U postgres -d postgres -c "SELECT 1;" >/dev/null 2>&1; then
       break
     fi
     sleep 1
   done
 
   start_ts="$(date +%s%N)"
-  # Decompress and stream into test postgres instance (suppress non-fatal comments)
+  # Decompress and stream into test postgres instance
   if ! zcat "${DECRYPTED_FILE}" | docker exec -i "${TEST_CONTAINER}" psql -U postgres -d postgres -q >/dev/null 2>&1; then
     docker rm -f "${TEST_CONTAINER}" >/dev/null 2>&1 || true
     log_error "DR drill restoration failed on test container!"
