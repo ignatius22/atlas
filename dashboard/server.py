@@ -77,9 +77,12 @@ def validate_app_name(app_val, allow_all=True):
     app_str = app_val.strip()
     if not app_str:
         return False, None, "Application parameter cannot be empty"
-    if allow_all and app_str == "--all":
-        return True, "--all", ""
-    if not re.match(r"^[a-zA-Z0-9_-]+$", app_str):
+    if app_str == "--all":
+        if allow_all:
+            return True, "--all", ""
+        else:
+            return False, None, "--all is not permitted for this action"
+    if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", app_str):
         return False, None, "Invalid application identifier format. Only alphanumeric, dashes, and underscores allowed."
     return True, app_str, ""
 
