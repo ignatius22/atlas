@@ -1,0 +1,98 @@
+graph TB
+    %% =========================================================================
+    %% ATLAS v1.1.0 ARCHITECTURE & DURABILITY LIFECYCLE
+    %% =========================================================================
+
+    subgraph OPERATORS ["1. OPERATOR & SCHEDULER CONTROL"]
+        direction LR
+        OP["👤 Human Operator"]
+        CLI["💻 Atlas CLI<br/>(bin/atlas)"]
+        DOC["🩺 Diagnostic Engine<br/>(bin/doctor)"]
+        DASH["📊 Web Dashboard & API<br/>(127.0.0.1:8888 · HMAC Token)"]
+        TIMER["⏱️ systemd.timer<br/>(00, 06, 12, 18 UTC · Persistent=true)"]
+    end
+
+    subgraph HOST ["2. PRODUCTION HOST & ATLAS CONTROL PLANE"]
+        direction TB
+
+        subgraph PROD_DATA ["Production Data Plane"]
+            DOCKER["🐳 Docker Engine"]
+            APP_DB[("🗄️ Application Database<br/>(PostgreSQL / MariaDB)")]
+            DOCKER --- APP_DB
+        end
+
+        subgraph ENGINE ["Atlas Engine Core (flock -n Protected)"]
+            BK_ENG["📦 Backup Engine<br/>(scripts/backup.sh)"]
+            SYNC_ENG["🔄 Offsite Sync Engine<br/>(scripts/sync-offsite.sh)"]
+            REST_ENG["🛠️ Restore Engine<br/>(scripts/restore.sh)"]
+        end
+
+        subgraph STORAGE ["Local Storage (/var/backups/<app>/)"]
+            direction TB
+            LOCAL_BK["💾 Local Backup Artifacts<br/>• <app>-<ts>.sql.gz (Gzip -9)<br/>• <app>-<ts>.sql.gz.sha256<br/>• <app>-<ts>.sql.gz.meta.json"]
+            SYNCED_MARKER["📜 Durability Authorization<br/>• <app>-<ts>.sql.gz.synced"]
+            RETENTION{"🛡️ Retention Gate<br/>Delete old backup?"}
+        end
+    end
+
+    subgraph OFFSITE ["3. OFFSITE CLOUD REPLICATION"]
+        direction TB
+        AGE_ENC["🔐 Asymmetric Encryption<br/>(age X25519 Public Recipient)"]
+        RETRY_UP["☁️ Cloud Upload<br/>(3 Attempts · 5s/10s/20s Backoff)"]
+        CLOUD_S3[("☁️ Remote Object Storage<br/>(Cloudflare R2 / AWS S3)")]
+        REMOTE_VERIFY{"🔍 Remote Verification<br/>(rclone lsf / aws s3 ls)"}
+    end
+
+    subgraph SANDBOX ["4. ISOLATED DR SANDBOX (Zero Production Risk)"]
+        direction TB
+        EPHEM_CONTAINER["📦 Ephemeral Test Container<br/>(test_<app>_db)"]
+        RESTORE_TEST["🧪 SQL Stream Restore<br/>(ON_ERROR_STOP=1)"]
+        HEALTH_VERIFY["✅ Schema & Data Verification<br/>(Tables, Row Counts, Health Probe)"]
+        EPHEM_CONTAINER --> RESTORE_TEST --> HEALTH_VERIFY
+    end
+
+    %% Flow Connections
+    TIMER -->|Scheduled Trigger| BK_ENG
+    OP -->|Manual / API Action| CLI & DASH
+    CLI --> BK_ENG & SYNC_ENG & REST_ENG & DOC
+    DASH -->|Subprocess (No Shell)| CLI
+
+    APP_DB -->|docker exec dump| BK_ENG
+    BK_ENG -->|Gzip -9 + SHA-256| LOCAL_BK
+
+    LOCAL_BK -->|Un-synced Backlog Discovery| SYNC_ENG
+    SYNC_ENG --> AGE_ENC
+    AGE_ENC -->|Encrypted .sql.gz.age| RETRY_UP
+    RETRY_UP --> CLOUD_S3
+    CLOUD_S3 --> REMOTE_VERIFY
+
+    REMOTE_VERIFY -->|CONFIRMED PRESENT| SYNCED_MARKER
+    REMOTE_VERIFY -.->|REJECTED / FAILED| SYNC_ENG
+
+    LOCAL_BK --> RETENTION
+    SYNCED_MARKER -->|AUTHORIZATION TOKEN| RETENTION
+    RETENTION -->|Has .synced + Expired| PRUNE["🗑️ Safe Local Prune"]
+    RETENTION -->|NO .synced| PRESERVE["🔒 PRESERVED LOCALLY<br/>(No Deletion Without Offsite Copy)"]
+
+    LOCAL_BK -->|Test Restore Request| REST_ENG
+    CLOUD_S3 -->|Offline Recovery (restore-offsite.sh)| REST_ENG
+    REST_ENG -->|Isolated Stream| EPHEM_CONTAINER
+
+    %% Styling & Classes
+    classDef control fill:#1E293B,stroke:#38BDF8,stroke-width:2px,color:#F8FAFC;
+    classDef prod fill:#064E3B,stroke:#10B981,stroke-width:2px,color:#F8FAFC;
+    classDef engine fill:#1E1E38,stroke:#818CF8,stroke-width:2px,color:#F8FAFC;
+    classDef storage fill:#312E81,stroke:#6366F1,stroke-width:2px,color:#F8FAFC;
+    classDef offsite fill:#1E3A8A,stroke:#60A5FA,stroke-width:2px,color:#F8FAFC;
+    classDef gate fill:#78350F,stroke:#F59E0B,stroke-width:2px,color:#FCD34D;
+    classDef sandbox fill:#581C87,stroke:#C084FC,stroke-width:2px,color:#F8FAFC;
+    classDef safety fill:#991B1B,stroke:#EF4444,stroke-width:2px,color:#FEE2E2;
+
+    class OP,CLI,DOC,DASH,TIMER control;
+    class DOCKER,APP_DB prod;
+    class BK_ENG,SYNC_ENG,REST_ENG engine;
+    class LOCAL_BK,SYNCED_MARKER storage;
+    class AGE_ENC,RETRY_UP,CLOUD_S3 offsite;
+    class REMOTE_VERIFY,RETENTION gate;
+    class EPHEM_CONTAINER,RESTORE_TEST,HEALTH_VERIFY sandbox;
+    class PRESERVE safety;

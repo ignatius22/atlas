@@ -38,6 +38,8 @@ Atlas enforces five non-negotiable safety invariants:
 
 ## 3. Architecture & Data Flow
 
+![Atlas Architecture](docs/architecture.svg)
+
 ```text
        systemd.timer
     (00, 06, 12, 18 UTC)
@@ -119,6 +121,12 @@ infra-prod/
 ├── .env.example                   # Environment variable template
 ├── .gitignore                     # Secret & artifact exclusion rules
 │
+├── docs/
+│   ├── USER_GUIDE.md              # 📖 Comprehensive User Manual & Operations Guide
+│   ├── ARCHITECTURE.md            # Deep system architecture & durability design
+│   ├── RUNBOOK.md                 # Incident response & emergency playbooks
+│   └── DISASTER_RECOVERY.md       # Cold-start server reconstruction guide
+│
 ├── systemd/
 │   ├── atlas-backup.service       # Native oneshot systemd backup & sync service
 │   └── atlas-backup.timer         # 6-Hour UTC persistent catch-up timer
@@ -168,6 +176,8 @@ infra-prod/
 ---
 
 ## 6. Quickstart & Verification
+
+> For a complete, step-by-step walkthrough covering installation, application registration, zero-knowledge encryption, and emergency runbooks, see the **[📖 Comprehensive User Guide](docs/USER_GUIDE.md)**.
 
 ### 1. Run the Diagnostic Doctor
 ```bash
