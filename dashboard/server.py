@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-Atlas V1.1 Production Web Dashboard - Backend Server
+Atlas V1.1 Production Web Dashboard - Hardened Backend Server
 Zero-dependency HTTP server utilizing Python 3 standard library.
-Binds to localhost:8080 by default for secure access via SSH port forward or reverse proxy.
+Binds to 127.0.0.1 by default for secure access via SSH port forward or reverse proxy.
 """
 
 import os
 import sys
+import re
 import json
 import time
+import hmac
 import shutil
 import subprocess
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -27,32 +29,59 @@ def load_env():
     """Safely parse .env file without executing shell code."""
     env = {}
     if ENV_FILE.exists():
-        with open(ENV_FILE, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    k = k.strip()
-                    v = v.strip().strip("'\"")
-                    env[k] = v
+        try:
+            with open(ENV_FILE, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        env[k] = v
+        except Exception:
+            pass
     return env
 
-def run_cmd(cmd, timeout=30):
-    """Run shell command safely and return exit code, stdout, and stderr."""
+def run_cmd(args, timeout=30, env=None):
+    """
+    Run subprocess safely without shell=True.
+    Accepts list of arguments and returns exit code, stdout, and stderr.
+    """
+    if isinstance(args, str):
+        args = [args]
     try:
         res = subprocess.run(
-            cmd,
-            shell=True,
+            args,
+            shell=False,
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd=str(BASE_DIR)
+            cwd=str(BASE_DIR),
+            env=env
         )
         return res.returncode, res.stdout, res.stderr
     except subprocess.TimeoutExpired:
         return 124, "", "Command timed out"
     except Exception as e:
         return 1, "", str(e)
+
+def validate_app_name(app_val, allow_all=True):
+    """
+    Validate application identifier against strict alphanumeric allowlist.
+    Rejects any shell metacharacters or unexpected structures.
+    """
+    if app_val is None:
+        return False, None, "Missing app parameter"
+    if not isinstance(app_val, str):
+        return False, None, "Application parameter must be a string"
+    app_str = app_val.strip()
+    if not app_str:
+        return False, None, "Application parameter cannot be empty"
+    if allow_all and app_str == "--all":
+        return True, "--all", ""
+    if not re.match(r"^[a-zA-Z0-9_-]+$", app_str):
+        return False, None, "Invalid application identifier format. Only alphanumeric, dashes, and underscores allowed."
+    return True, app_str, ""
 
 def get_system_summary():
     """Retrieve comprehensive system metrics and database container statuses."""
@@ -63,34 +92,46 @@ def get_system_summary():
     disk_total_gb = round(disk.total / (1024 ** 3), 1)
     disk_used_gb = round(disk.used / (1024 ** 3), 1)
     disk_free_gb = round(disk.free / (1024 ** 3), 1)
-    disk_pct = round((disk.used / disk.total) * 100, 1)
+    disk_pct = round((disk.used / disk.total) * 100, 1) if disk.total > 0 else 0
 
     # Containers Status
     containers = []
     target_containers = ["catalogflow_postgres", "sand2keys-db", "wdni_prod_postgres"]
+    fmt = '{"id":"{{.Id}}","status":"{{.State.Status}}","started":"{{.State.StartedAt}}","health":"{{if .State.Health}}{{.State.Health.Status}}{{else}}n/a{{end}}"}'
     for name in target_containers:
-        cmd = f'docker inspect "{name}" --format \'{{"id":"{{{{.Id}}}}","status":"{{{{.State.Status}}}}","started":"{{{{.State.StartedAt}}}}","health":"{{{{if .State.Health}}}}{{{{.State.Health.Status}}}}{{{{else}}}}n/a{{{{end}}}}"}}\''
-        code, out, _ = run_cmd(cmd)
+        code, out, _ = run_cmd(["docker", "inspect", name, "--format", fmt], timeout=10)
         if code == 0 and out.strip():
             try:
                 data = json.loads(out.strip())
                 data["name"] = name
-                data["id_short"] = data["id"][:12]
+                data["id_short"] = data["id"][:12] if "id" in data and data["id"] else ""
                 containers.append(data)
             except Exception:
                 containers.append({"name": name, "status": "unknown", "health": "unknown", "started": ""})
         else:
             containers.append({"name": name, "status": "not found / stopped", "health": "down", "started": ""})
 
-    # Zero-Knowledge Key Scan
-    key_cmd = (
-        'find /opt/atlas /root /home /etc /var/backups -maxdepth 4 -type f '
-        '! -path "*/tests/*" ! -path "*/docs/*" ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/__pycache__/*" '
-        '! -name "production-preflight" ! -name "notify.sh" ! -name "restore-offsite.sh" ! -name "server.py" ! -name "README.md" ! -name "*.pyc" '
-        '-exec grep -l "AGE-SECRET-KEY" {} + 2>/dev/null | wc -l || echo "0"'
-    )
-    _, key_out, _ = run_cmd(key_cmd)
-    key_count = int(key_out.strip() or 0)
+    # Zero-Knowledge Key Scan (Pure Python traversal, zero shell execution)
+    key_count = 0
+    scan_dirs = ["/opt/atlas", "/root", "/home", "/etc", "/var/backups"]
+    for sdir in scan_dirs:
+        p = Path(sdir)
+        if p.exists():
+            try:
+                for root, dirs, files in os.walk(str(p)):
+                    dirs[:] = [d for d in dirs if d not in {".git", "tests", "docs", "node_modules", "__pycache__"}]
+                    for fname in files:
+                        if fname in {"production-preflight", "notify.sh", "restore-offsite.sh", "server.py", "README.md"} or fname.endswith(".pyc"):
+                            continue
+                        fpath = os.path.join(root, fname)
+                        try:
+                            with open(fpath, "r", encoding="utf-8", errors="ignore") as f_obj:
+                                if "AGE-SECRET-KEY" in f_obj.read():
+                                    key_count += 1
+                        except Exception:
+                            pass
+            except Exception:
+                pass
 
     # Recipient Info
     recipient = env.get("ATLAS_AGE_RECIPIENT", "")
@@ -102,9 +143,17 @@ def get_system_summary():
     endpoint = env.get("ATLAS_S3_ENDPOINT", "")
     has_r2 = bool(endpoint and env.get("ATLAS_S3_ACCESS_KEY"))
 
-    # Crontab check
-    _, cron_out, _ = run_cmd("crontab -l")
-    has_cron = "0 */6" in cron_out and "backup.sh --all" in cron_out
+    # Scheduler check: test systemd timer first, then crontab fallback
+    has_systemd_timer = False
+    systemd_code, systemd_out, _ = run_cmd(["systemctl", "is-active", "atlas-backup.timer"], timeout=5)
+    if systemd_code == 0 and "active" in systemd_out.lower():
+        has_systemd_timer = True
+
+    _, cron_out, _ = run_cmd(["crontab", "-l"], timeout=5)
+    has_cron = ("0 */6" in cron_out or "0 0,6,12,18" in cron_out) and "backup.sh --all" in cron_out
+
+    scheduler_type = "systemd" if has_systemd_timer else ("cron" if has_cron else "none")
+    scheduler_active = has_systemd_timer or has_cron
 
     return {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -128,9 +177,14 @@ def get_system_summary():
             "bucket": bucket,
             "configured": has_r2
         },
+        "scheduler": {
+            "type": scheduler_type,
+            "active": scheduler_active,
+            "rpo": "6 Hours" if scheduler_active else "Unscheduled"
+        },
         "cron": {
-            "active": has_cron,
-            "rpo": "6 Hours" if has_cron else "24 Hours (Legacy)"
+            "active": scheduler_active,
+            "rpo": "6 Hours" if scheduler_active else "24 Hours (Legacy)"
         }
     }
 
@@ -177,7 +231,7 @@ def get_backups_list():
     return result
 
 def get_remote_objects():
-    """Query Cloudflare R2 bucket objects via rclone."""
+    """Query Cloudflare R2 bucket objects via rclone without shell interpolation."""
     env = load_env()
     bucket = env.get("ATLAS_S3_BUCKET", "atlas-production-backups")
     endpoint = env.get("ATLAS_S3_ENDPOINT", "")
@@ -187,15 +241,17 @@ def get_remote_objects():
     if not endpoint or not key_id:
         return {"configured": False, "objects": [], "error": "Cloud credentials not configured in .env"}
 
-    cmd = (
-        f'export RCLONE_S3_PROVIDER=Cloudflare; '
-        f'export RCLONE_S3_ENDPOINT="{endpoint}"; '
-        f'export RCLONE_S3_ACCESS_KEY_ID="{key_id}"; '
-        f'export RCLONE_S3_SECRET_ACCESS_KEY="{secret_key}"; '
-        f'export RCLONE_S3_NO_CHECK_BUCKET=true; '
-        f'rclone lsf ":s3:{bucket}/atlas-backups/" --recursive --s3-no-check-bucket'
-    )
-    code, out, err = run_cmd(cmd, timeout=15)
+    env_vars = os.environ.copy()
+    env_vars.update({
+        "RCLONE_S3_PROVIDER": "Cloudflare",
+        "RCLONE_S3_ENDPOINT": endpoint,
+        "RCLONE_S3_ACCESS_KEY_ID": key_id,
+        "RCLONE_S3_SECRET_ACCESS_KEY": secret_key,
+        "RCLONE_S3_NO_CHECK_BUCKET": "true"
+    })
+
+    args = ["rclone", "lsf", f":s3:{bucket}/atlas-backups/", "--recursive", "--s3-no-check-bucket"]
+    code, out, err = run_cmd(args, env=env_vars, timeout=15)
     if code != 0:
         return {"configured": True, "objects": [], "error": err.strip() or "R2 listing failed"}
 
@@ -211,6 +267,30 @@ class AtlasDashboardHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(PUBLIC_DIR), **kwargs)
 
+    def check_auth(self):
+        """
+        Verify X-Atlas-Token header for mutating actions.
+        Uses constant-time comparison against configured ATLAS_DASHBOARD_TOKEN.
+        """
+        env = load_env()
+        expected_token = os.environ.get("ATLAS_DASHBOARD_TOKEN") or env.get("ATLAS_DASHBOARD_TOKEN")
+        if not expected_token:
+            return False, "Server authentication token not configured. Set ATLAS_DASHBOARD_TOKEN in environment or .env."
+        
+        token = self.headers.get("X-Atlas-Token", "")
+        if not token:
+            return False, "Missing required X-Atlas-Token authentication header."
+        
+        if not hmac.compare_digest(token.strip(), expected_token.strip()):
+            return False, "Invalid X-Atlas-Token."
+        
+        return True, ""
+
+    def do_OPTIONS(self):
+        """Handle preflight requests without wildcard CORS."""
+        self.send_response(204)
+        self.end_headers()
+
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/status":
@@ -220,15 +300,15 @@ class AtlasDashboardHandler(SimpleHTTPRequestHandler):
         elif parsed.path == "/api/offsite":
             self.send_json(get_remote_objects())
         elif parsed.path == "/api/preflight":
-            code, out, _ = run_cmd(f"{BASE_DIR}/bin/production-preflight --json", timeout=20)
+            code, out, _ = run_cmd([str(BASE_DIR / "bin" / "production-preflight"), "--json"], timeout=20)
             try:
                 data = json.loads(out.strip())
                 self.send_json(data)
             except Exception:
                 self.send_json({"error": "Preflight JSON unavailable", "raw": out}, status=500)
         elif parsed.path == "/api/doctor":
-            code, out, err = run_cmd(f"{BASE_DIR}/bin/doctor", timeout=20)
-            self.send_json({"exit_code": code, "output": out + err})
+            code, out, err = run_cmd([str(BASE_DIR / "bin" / "doctor")], timeout=20)
+            self.send_json({"exit_code": code, "output": (out + err).strip()})
         else:
             # Fallback to static files
             super().do_GET()
@@ -236,29 +316,71 @@ class AtlasDashboardHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         content_length = int(self.headers.get("Content-Length", 0))
+        
+        if content_length > 1024 * 1024:  # 1MB max body limit
+            self.send_json({"error": "Payload too large"}, status=413)
+            return
+
         body = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
         try:
             req_data = json.loads(body)
+            if not isinstance(req_data, dict):
+                self.send_json({"error": "Malformed JSON: body must be a JSON object"}, status=400)
+                return
         except Exception:
-            req_data = {}
+            self.send_json({"error": "Malformed or invalid JSON payload"}, status=400)
+            return
+
+        # Enforce authentication for all mutating actions
+        if parsed.path in {"/api/actions/backup", "/api/actions/sync", "/api/actions/restore-test"}:
+            is_authed, auth_err = self.check_auth()
+            if not is_authed:
+                self.send_json({"error": auth_err}, status=401)
+                return
 
         if parsed.path == "/api/actions/backup":
-            app = req_data.get("app", "--all")
-            flag = f"--app {app}" if app != "--all" else "--all"
-            code, out, err = run_cmd(f"{BASE_DIR}/scripts/backup.sh {flag}", timeout=60)
-            self.send_json({"action": "backup", "exit_code": code, "output": out + err})
+            raw_app = req_data.get("app", "--all")
+            valid, app, err = validate_app_name(raw_app, allow_all=True)
+            if not valid:
+                self.send_json({"error": err}, status=400)
+                return
+
+            args = [str(BASE_DIR / "scripts" / "backup.sh")]
+            if app != "--all":
+                args.extend(["--app", app])
+            else:
+                args.append("--all")
+
+            code, out, err = run_cmd(args, timeout=120)
+            self.send_json({"action": "backup", "exit_code": code, "output": (out + err).strip()})
 
         elif parsed.path == "/api/actions/sync":
-            app = req_data.get("app", "--all")
-            flag = f"--app {app}" if app != "--all" else "--all"
-            code, out, err = run_cmd(f"{BASE_DIR}/scripts/sync-offsite.sh {flag}", timeout=60)
-            self.send_json({"action": "sync", "exit_code": code, "output": out + err})
+            raw_app = req_data.get("app", "--all")
+            valid, app, err = validate_app_name(raw_app, allow_all=True)
+            if not valid:
+                self.send_json({"error": err}, status=400)
+                return
+
+            args = [str(BASE_DIR / "scripts" / "sync-offsite.sh")]
+            if app != "--all":
+                args.extend(["--app", app])
+            else:
+                args.append("--all")
+
+            code, out, err = run_cmd(args, timeout=120)
+            self.send_json({"action": "sync", "exit_code": code, "output": (out + err).strip()})
 
         elif parsed.path == "/api/actions/restore-test":
-            app = req_data.get("app", "catalogflow")
-            cmd = f"{BASE_DIR}/scripts/restore.sh --app {app} --latest --target-env disposable-test"
-            code, out, err = run_cmd(cmd, timeout=120)
-            self.send_json({"action": "restore-test", "app": app, "exit_code": code, "output": out + err})
+            raw_app = req_data.get("app")
+            valid, app, err = validate_app_name(raw_app, allow_all=False)
+            if not valid:
+                self.send_json({"error": err or "Application name required for restore-test"}, status=400)
+                return
+
+            args = [str(BASE_DIR / "scripts" / "restore.sh"), "--app", app, "--target=test"]
+            code, out, err = run_cmd(args, timeout=180)
+            self.send_json({"action": "restore-test", "app": app, "exit_code": code, "output": (out + err).strip()})
+
         else:
             self.send_json({"error": "Not Found"}, status=404)
 
@@ -267,7 +389,7 @@ class AtlasDashboardHandler(SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        # Restrict CORS to same-origin
         self.end_headers()
         self.wfile.write(body)
 

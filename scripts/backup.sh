@@ -295,13 +295,20 @@ backup_single_app() {
   
   # Check 6: Enforce retention policy strictly within target_dir
   local pruned_count=0
+  local preserved_count=0
   if [ "${retention}" -gt 0 ]; then
-    while IFS= read -r old_file; do
+    while IFS= read -r -d '' old_file; do
       if [ -n "${old_file}" ] && [ -f "${old_file}" ]; then
-        rm -f "${old_file}"
-        pruned_count=$((pruned_count + 1))
+        if [ -f "${old_file}.synced" ]; then
+          log_info "Pruning replicated expired backup: $(basename "${old_file}")"
+          rm -f "${old_file}" "${old_file}.sha256" "${old_file}.age" "${old_file}.age.sha256" "${old_file}.meta.json" "${old_file}.synced"
+          pruned_count=$((pruned_count + 1))
+        else
+          log_warn "PRESERVING un-replicated backup despite retention expiry: $(basename "${old_file}") (missing .synced durability marker)"
+          preserved_count=$((preserved_count + 1))
+        fi
       fi
-    done < <(find "${target_dir}" -maxdepth 1 -type f -name "${app}-*.sql.gz*" -mtime "+${retention}" 2>/dev/null || true)
+    done < <(find "${target_dir}" -maxdepth 1 -type f -name "${app}-*.sql.gz" -mtime "+${retention}" -print0 2>/dev/null || true)
   fi
   
   # Disable error trap on clean exit
@@ -316,7 +323,7 @@ backup_single_app() {
   log_info "  Compressed Size:   ${file_size}"
   log_info "  Decompressed Size: ${decompressed_bytes} bytes"
   log_info "  SHA-256 Checksum:  ${checksum}"
-  log_info "  Retention:         Kept <= ${retention} days (pruned ${pruned_count} old files)"
+  log_info "  Retention:         Kept <= ${retention} days (pruned ${pruned_count} replicated files, preserved ${preserved_count} un-replicated files)"
   return 0
 }
 

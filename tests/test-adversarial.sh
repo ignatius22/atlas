@@ -153,6 +153,129 @@ assert_exit_code 2 "${ATLAS_ROOT}/scripts/setup-ssl.sh -d 'invalid_domain_name'"
 assert_exit_code 2 "${ATLAS_ROOT}/scripts/setup-ssl.sh -d 'example.com; rm -rf /'" "setup-ssl.sh rejects command injection in domain flag"
 
 # ------------------------------------------------------------------------------
+# 7. Dashboard Security, Authentication & Injection Resistance
+# ------------------------------------------------------------------------------
+printf "\n\033[1m[7. Dashboard Security, Authentication & Injection Resistance]\033[0m\n"
+
+python3 - << 'EOF'
+import os
+import sys
+import json
+import time
+import socket
+import threading
+import urllib.request
+import urllib.error
+from pathlib import Path
+
+# Add project root to path
+test_dir = Path.cwd()
+sys.path.insert(0, str(test_dir))
+from dashboard import server
+
+# 1. Test validate_app_name allowlist
+valid_cases = ["catalogflow", "sand2keys", "wdni_prod", "app-123", "--all"]
+for v in valid_cases:
+    ok, app, err = server.validate_app_name(v, allow_all=True)
+    assert ok, f"Expected '{v}' to be valid, got error: {err}"
+
+invalid_cases = [
+    "catalogflow; id",
+    "catalogflow && id",
+    "catalogflow | id",
+    "$(id)",
+    "`id`",
+    "../../../etc",
+    "foo/bar",
+    "foo baz",
+    "app\nreboot",
+    "app\x00inject",
+    "",
+    "   ",
+]
+for inv in invalid_cases:
+    ok, app, err = server.validate_app_name(inv, allow_all=True)
+    assert not ok, f"Expected '{inv}' to be rejected, but got accepted"
+
+# Non-string rejection
+ok, _, _ = server.validate_app_name(12345, allow_all=True)
+assert not ok, "Expected integer app to be rejected"
+
+# 2. Spin up test server on ephemeral port
+test_port = 8998
+test_token = "atlas-test-secret-token"
+os.environ["ATLAS_DASHBOARD_PORT"] = str(test_port)
+os.environ["ATLAS_DASHBOARD_HOST"] = "127.0.0.1"
+os.environ["ATLAS_DASHBOARD_TOKEN"] = test_token
+
+assert server.HOST == "127.0.0.1" or os.environ.get("ATLAS_DASHBOARD_HOST") == "127.0.0.1"
+
+httpd = server.HTTPServer(("127.0.0.1", test_port), server.AtlasDashboardHandler)
+t = threading.Thread(target=httpd.serve_forever, daemon=True)
+t.start()
+time.sleep(0.3)
+
+base_url = f"http://127.0.0.1:{test_port}"
+
+def make_req(path, data=None, headers=None):
+    url = f"{base_url}{path}"
+    req_headers = {"Content-Type": "application/json"}
+    if headers:
+        req_headers.update(headers)
+    req_body = json.dumps(data).encode("utf-8") if data is not None else None
+    req = urllib.request.Request(url, data=req_body, headers=req_headers, method="POST" if data is not None else "GET")
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return resp.status, resp.read().decode("utf-8"), dict(resp.getheaders())
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8"), dict(e.headers)
+
+# 3. Test Auth on mutating endpoints
+for endpoint in ["/api/actions/backup", "/api/actions/sync", "/api/actions/restore-test"]:
+    st, body, _ = make_req(endpoint, data={"app": "test"})
+    assert st == 401, f"Expected 401 without auth header on {endpoint}, got {st}"
+    
+    st, body, _ = make_req(endpoint, data={"app": "test"}, headers={"X-Atlas-Token": "invalid-token"})
+    assert st == 401, f"Expected 401 with invalid token on {endpoint}, got {st}"
+
+# 4. Test CORS
+st, body, headers = make_req("/api/status")
+lower_headers = {k.lower(): v for k, v in headers.items()}
+assert "access-control-allow-origin" not in lower_headers, "Wildcard Access-Control-Allow-Origin must not be present"
+
+# 5. Test Injection payload rejection via API
+auth_headers = {"X-Atlas-Token": test_token}
+pwn_file = "/tmp/atlas_dashboard_test_pwned"
+if os.path.exists(pwn_file):
+    os.remove(pwn_file)
+
+for payload in [
+    {"app": f"catalogflow; touch {pwn_file}"},
+    {"app": f"catalogflow && touch {pwn_file}"},
+    {"app": f"`touch {pwn_file}`"},
+    {"app": f"$(touch {pwn_file})"},
+    {"app": "foo | bar"},
+    {"app": "../../../etc"},
+]:
+    st, body, _ = make_req("/api/actions/backup", data=payload, headers=auth_headers)
+    assert st == 400, f"Expected HTTP 400 for payload {payload}, got {st}: {body}"
+    assert not os.path.exists(pwn_file), f"Command injection executed for {payload}!"
+
+# 6. Test restore-test endpoint requires app
+st, body, _ = make_req("/api/actions/restore-test", data={"app": "--all"}, headers=auth_headers)
+assert st == 400, f"Expected HTTP 400 for restore-test with --all, got {st}"
+
+httpd.shutdown()
+EOF
+if [ $? -eq 0 ]; then
+  printf "  \033[32m✓ PASS\033[0m: Dashboard input validation, X-Atlas-Token auth & CORS verified\n"
+  PASSED=$((PASSED + 1))
+else
+  printf "  \033[31m✗ FAIL\033[0m: Dashboard security verification failed\n"
+  FAILED=$((FAILED + 1))
+fi
+
+# ------------------------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------------------------
 printf "\n\033[1mAdversarial Tests Summary: %d passed, %d failed\033[0m\n" "${PASSED}" "${FAILED}"

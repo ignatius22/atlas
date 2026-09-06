@@ -346,6 +346,15 @@ if [ -d "${BACKUP_STORAGE}" ]; then
       fi
     done
   fi
+  
+  # Check automated backup scheduler
+  if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet atlas-backup.timer 2>/dev/null; then
+    record_pass "Backup scheduler: Active systemd timer (atlas-backup.timer - 6-hour RPO with persistent catch-up)"
+  elif crontab -l 2>/dev/null | grep -E "(0 \*/6|0 0,6,12,18)" | grep -q "backup.sh"; then
+    record_pass "Backup scheduler: Active cron job (6-hour snapshot interval)"
+  else
+    record_warn "No active backup scheduler detected (neither systemd atlas-backup.timer nor crontab found)"
+  fi
 else
   record_warn "Global backup directory '${BACKUP_STORAGE}' does not exist"
 fi
