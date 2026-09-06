@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Atlas V1.1 - Web Dashboard Launcher
+# ==============================================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ATLAS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+PORT="${1:-8888}"
+HOST="${ATLAS_DASHBOARD_HOST:-127.0.0.1}"
+
+export ATLAS_DASHBOARD_PORT="${PORT}"
+export ATLAS_DASHBOARD_HOST="${HOST}"
+
+echo "=================================================="
+echo " Starting Atlas V1.1 Production Web Dashboard"
+echo " Host: http://${HOST}:${PORT}"
+echo "=================================================="
+
+exec python3 "${ATLAS_DIR}/dashboard/server.py"

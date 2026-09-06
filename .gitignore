@@ -1,27 +1,35 @@
+# ==============================================================================
+# Atlas Production Template — .gitignore
+# ==============================================================================
+
+# Environment files containing live secrets
 .env
 .env.*
-*.key
-*.pem
-*.age
-*.identity
-secrets/
+!.env.example
+
+# Live application registries containing proprietary host paths
+config/apps.yml
+config/apps.yaml
+config/backup.yml
+config/backup.yaml
+
+# Local backups and temporary archives
+/var/backups/
 backups/
 *.sql
 *.sql.gz
-*.sql.gz.tmp
+*.sql.gz.sha256
 *.tar.gz
-*.dump
-/var/backups/
+
+# Temporary test directories and scratch files
+/tmp/
+/scratch/
 .tmp/
-tmp/
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.pytest_cache/
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
 *.log
-tests/output/
+
+# Operating System & IDE Artifacts
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
