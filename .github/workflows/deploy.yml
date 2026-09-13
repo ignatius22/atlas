@@ -34,6 +34,10 @@ jobs:
           script: |
             set -Eeuo pipefail
             echo "=== Starting Atlas VPS Deployment ==="
+            echo "Logged in as: $(whoami)"
+            sudo chown -R "$(whoami):$(whoami)" /opt/atlas || true
+            sudo chmod -R u+rwX /opt/atlas/.git || true
+            git config --global --add safe.directory /opt/atlas
             cd /opt/atlas
             git pull origin main || git pull origin master
             sudo ./scripts/install.sh
