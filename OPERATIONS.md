@@ -100,14 +100,28 @@ docker exec atlas_nginx_gateway nginx -s reload
 
 ---
 
-## 6. Standard Cron Schedule
+## 6. Production Scheduler (Systemd Timers)
 
-On an Atlas production host, configure crontab as follows:
+Atlas uses native systemd timers for production database backups.
+
+### Managing the Backup Timer
+```bash
+# Enable and start the timer
+sudo systemctl enable --now atlas-backup.timer
+
+# Inspect timer status and next trigger time
+systemctl list-timers atlas-backup.timer
+systemctl status atlas-backup.timer
+
+# View recent execution logs
+journalctl -u atlas-backup.service -n 100 --no-pager
+```
+
+### Cron (Fallback Only)
+On legacy or non-systemd systems, crontab can be used as a fallback:
 ```cron
-# Atlas Automated Application Backups
-0 0 * * * /path/to/atlas/scripts/backup.sh --app=app1 >> /var/log/atlas/backup-app1.log 2>&1
-0 1 * * * /path/to/atlas/scripts/backup.sh --app=app2 >> /var/log/atlas/backup-app2.log 2>&1
-0 2 * * * /path/to/atlas/scripts/backup.sh --app=app3 >> /var/log/atlas/backup-app3.log 2>&1
+# Atlas Automated Application Backups (Fallback only - no persistent catch-up)
+0 0,6,12,18 * * * /opt/atlas/scripts/backup.sh --all && /opt/atlas/scripts/sync-offsite.sh --all >> /var/log/atlas-backup.log 2>&1
 
 # Weekly Docker Build Cache & Dangling Image Cleanup (Sunday at 03:00)
 0 3 * * 0 docker builder prune -a -f >> /var/log/atlas/docker-prune.log 2>&1

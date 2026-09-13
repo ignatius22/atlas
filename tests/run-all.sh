@@ -32,6 +32,8 @@ run_test_suite "${TEST_DIR}/test-health-check.sh" "Health Check Tests"
 run_test_suite "${TEST_DIR}/test-yaml.sh" "PyYAML Configuration Reader Tests"
 run_test_suite "${TEST_DIR}/test-adversarial.sh" "Adversarial & Failure-Path Tests"
 run_test_suite "${TEST_DIR}/test-offsite.sh" "Off-Site DR & Replication Tests"
+run_test_suite "${TEST_DIR}/test-systemd.sh" "Systemd Scheduler & Installer Tests"
+run_test_suite "${TEST_DIR}/test-notifications-dashboard.sh" "Notifications & Dashboard Tests"
 
 printf "\033[1m\033[36m==================================================\033[0m\n"
 if [ "${FAILURES}" -eq 0 ]; then

@@ -438,11 +438,19 @@ sudo systemctl enable --now atlas-backup.timer
 * **Legacy Cron**: If your server is down for maintenance at 06:00 UTC, cron skips the run permanently. Your data loss window doubles to 12+ hours.
 * **Atlas Systemd Timer**: With `Persistent=true`, systemd records timestamps in `/var/lib/systemd/timers/`. If the server reboots at 06:15 UTC, systemd catches up and executes the missed backup immediately upon boot.
 
-### Inspect Timer Status
+### Inspect Timer State and Logs
 ```bash
 systemctl list-timers atlas-backup.timer
-journalctl -u atlas-backup.service -n 50 --no-pager
+systemctl status atlas-backup.timer
+journalctl -u atlas-backup.service -n 100 --no-pager
 ```
+
+### Cron (Fallback Only)
+In environments where systemd is not present (such as non-systemd container environments), cron may be used as a fallback scheduler:
+```cron
+0 0,6,12,18 * * * root /opt/atlas/scripts/backup.sh --all && /opt/atlas/scripts/sync-offsite.sh --all >> /var/log/atlas-backup.log 2>&1
+```
+> **Warning**: Cron is strictly a fallback. It lacks persistent execution tracking (`Persistent=true`). If the VPS is powered off, rebooting, or under maintenance during a scheduled cron trigger, that backup run is permanently lost and will not run until the next scheduled window. Always prefer native systemd timers on production Linux VPS hosts.
 
 ---
 
@@ -469,19 +477,58 @@ Run the comprehensive 6-section diagnostic audit at any time:
 Atlas includes a zero-dependency Python 3 HTTP status API and web dashboard.
 
 ### Starting the Dashboard
+To start the dashboard manually:
 ```bash
 export ATLAS_DASHBOARD_TOKEN="your-secure-token"
-export ATLAS_DASHBOARD_PORT=8888
-/opt/atlas/dashboard/server.py
+/opt/atlas/bin/atlas-dashboard 8888
 ```
 
-### Security Defaults
-* **Localhost Binding**: Binds strictly to `127.0.0.1`. Access remotely via SSH port forwarding:
+To manage the dashboard as a systemd background service:
+```bash
+# Unit file located at /opt/atlas/infra/atlas-dashboard.service
+sudo cp /opt/atlas/infra/atlas-dashboard.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now atlas-dashboard.service
+```
+
+### Security Invariants & Defaults
+* **Authentication Required**: The server strictly requires `ATLAS_DASHBOARD_TOKEN` in the environment or `/opt/atlas/.env`. The process **refuses to start** if the token is absent or empty.
+* **Localhost Binding**: Binds strictly to `127.0.0.1:8888` by default.
+  > **Warning:** Do not expose the dashboard publicly until a domain, reverse proxy (such as Nginx with TLS), and a secure authentication strategy are configured.
+* **SSH Tunnel Access (Recommended)**:
   ```bash
   ssh -L 8888:127.0.0.1:8888 root@your-vps-ip
   ```
+  Then browse to `http://localhost:8888`.
+* **Health & Status Verification**:
+  ```bash
+  # Check service health endpoint
+  curl -sS http://127.0.0.1:8888/api/health
+
+  # Check full status summary
+  curl -sS http://127.0.0.1:8888/api/status
+
+  # Check systemd service status
+  systemctl status atlas-dashboard.service
+  ```
 * **Authentication**: All mutating endpoints (`/api/actions/backup`, `/api/actions/sync`, `/api/actions/restore-test`) require header `X-Atlas-Token: your-secure-token` evaluated with constant-time `hmac.compare_digest`.
 * **Zero Shell Execution**: Subprocess calls use structured arrays with strict alphanumeric parameter allowlists (`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`).
+
+### Alerting & Failure Notifications (Slack & Discord)
+Atlas dispatches failure alerts to optional Discord or Slack webhooks configured in `/opt/atlas/.env`:
+```dotenv
+ATLAS_DISCORD_WEBHOOK=https://discord.com/api/webhooks/...
+ATLAS_SLACK_WEBHOOK=https://hooks.slack.com/services/...
+ATLAS_NOTIFY_SUCCESS=false
+```
+
+* **Alert Events**:
+  1. **Database Backup Failure**: Database dump failures or missing containers.
+  2. **Cloudflare R2 Sync Failure**: Remote upload rejections after 3 bounded retries.
+  3. **Restore-Drill Failure**: Ephemeral verification container failures or corrupt SQL schemas.
+  4. **Repeated Scheduler Failure**: Multiple consecutive automated snapshot failures.
+* **Secret Protection**: Webhook URLs, private age keys, and container passwords are never logged to console, journald, the Web UI, or Git.
+* **Success Notifications**: Disabled by default (`ATLAS_NOTIFY_SUCCESS=false`) to avoid channel noise. Set `ATLAS_NOTIFY_SUCCESS=true` to enable.
 
 ---
 

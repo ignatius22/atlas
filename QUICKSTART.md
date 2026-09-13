@@ -185,6 +185,14 @@ If the VPS host is completely lost:
 | **Test Restore (Sandbox)** | `/opt/atlas/scripts/restore.sh --app=<name> --target=test` |
 | **Production Restore** | `/opt/atlas/scripts/restore.sh --app=<name> --target=production` |
 | **Off-Site Cloud Sync** | `/opt/atlas/scripts/sync-offsite.sh --app=<name>` |
-| **Check Scheduler Status** | `systemctl list-timers atlas-backup.timer` |
-| **View Backup Service Logs** | `journalctl -u atlas-backup.service -n 50 --no-pager` |
+| **List Backup Timers** | `systemctl list-timers atlas-backup.timer` |
+| **Check Timer Status** | `systemctl status atlas-backup.timer` |
+| **View Backup Service Logs** | `journalctl -u atlas-backup.service -n 100 --no-pager` |
+
+---
+
+## 7. Scheduler Policy: Systemd vs. Cron
+
+* **Systemd Timer (Recommended Production Scheduler)**: Atlas relies on `systemd/atlas-backup.timer` and `systemd/atlas-backup.service` for production snapshotting. With `Persistent=true`, systemd automatically triggers catch-up backups immediately after a host reboot or maintenance window.
+* **Cron (Fallback Only)**: Cron is strictly a fallback for environments lacking systemd. Note that cron does not provide persistent catch-up after downtime—any runs scheduled while the server was down will be permanently missed.
 

@@ -11,6 +11,10 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/lib/notify.sh
+if [ -f "${SCRIPT_DIR}/lib/notify.sh" ]; then
+  source "${SCRIPT_DIR}/lib/notify.sh"
+fi
 
 APP_TARGET="${APP:-}"
 BACKUP_FILE=""
@@ -258,6 +262,7 @@ case "${TARGET_ENV}" in
       sleep 1
       if [ "$i" -eq 30 ]; then
         log_error "Temporary test database container failed to start in 30s."
+        send_atlas_notification "FAILURE" "Atlas Restore Drill Failed" "Application: \`${APP_TARGET}\`\nTarget: test\nArchive: \`$(basename "${BACKUP_FILE}")\`\nError: Ephemeral container failed to accept connections within 30s on host \`$(hostname)\`." || true
         exit 1
       fi
     done
@@ -267,6 +272,7 @@ case "${TARGET_ENV}" in
     gzip -dc "${BACKUP_FILE}" | docker exec -i "${TEMP_NAME}" \
       sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec psql -v ON_ERROR_STOP=1 -U "$1" -d "$2"' _ "${TEST_USER}" "${TEST_DB}" || {
         log_error "Database restore failed! SQL error encountered."
+        send_atlas_notification "FAILURE" "Atlas Restore Drill Failed" "Application: \`${APP_TARGET}\`\nTarget: test\nArchive: \`$(basename "${BACKUP_FILE}")\`\nError: SQL error encountered during test restore on host \`$(hostname)\`." || true
         exit 1
       }
     
@@ -315,6 +321,7 @@ case "${TARGET_ENV}" in
     gzip -dc "${BACKUP_FILE}" | docker exec -i "${PROD_CONTAINER}" \
       sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec psql -v ON_ERROR_STOP=1 --single-transaction -U "$1" -d "$2"' _ "${DB_USER}" "${DB_NAME}" || {
         log_error "Production database restore failed during SQL execution!"
+        send_atlas_notification "CRITICAL" "Production Database Restore Failed" "Application: \`${APP_TARGET}\`\nContainer: \`${PROD_CONTAINER}\`\nArchive: \`$(basename "${BACKUP_FILE}")\`\nError: Production restore failed on host \`$(hostname)\`." || true
         exit 1
       }
       

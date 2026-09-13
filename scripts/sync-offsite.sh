@@ -435,12 +435,20 @@ if [ "${SYNC_ALL}" = "true" ]; then
   
   if [ "${OVERALL_STATUS}" -eq 0 ]; then
     log_success "All applications synced to off-site storage successfully."
+    record_scheduler_run_result "success" || true
   else
     log_error "One or more applications failed off-site replication."
+    send_atlas_notification "FAILURE" "Atlas Batch Off-Site Sync Failed" "One or more applications failed off-site replication on host \`$(hostname)\`." || true
+    record_scheduler_run_result "failure" || true
     exit 1
   fi
 elif [ -n "${APP_TARGET}" ]; then
-  sync_app_backup "${APP_TARGET}" "${EXPLICIT_FILE}"
+  if sync_app_backup "${APP_TARGET}" "${EXPLICIT_FILE}"; then
+    record_scheduler_run_result "success" || true
+  else
+    record_scheduler_run_result "failure" || true
+    exit 1
+  fi
 else
   log_error "Missing required option: Specify --app=APP_NAME or --all."
   print_usage

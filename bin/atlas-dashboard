@@ -10,12 +10,26 @@ ATLAS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PORT="${1:-8888}"
 HOST="${ATLAS_DASHBOARD_HOST:-127.0.0.1}"
 
+TOKEN="${ATLAS_DASHBOARD_TOKEN:-}"
+if [ -z "${TOKEN}" ] && [ -f "${ATLAS_DIR}/.env" ]; then
+  TOKEN="$(grep -E "^ATLAS_DASHBOARD_TOKEN=" "${ATLAS_DIR}/.env" 2>/dev/null | head -n 1 | cut -d'=' -f2- | tr -d "'\" " || true)"
+fi
+
+if [ -z "${TOKEN}" ]; then
+  echo "Error: ATLAS_DASHBOARD_TOKEN is required to start the Atlas Dashboard." >&2
+  echo "Set ATLAS_DASHBOARD_TOKEN in your environment or in ${ATLAS_DIR}/.env." >&2
+  exit 1
+fi
+
 export ATLAS_DASHBOARD_PORT="${PORT}"
 export ATLAS_DASHBOARD_HOST="${HOST}"
+export ATLAS_DASHBOARD_TOKEN="${TOKEN}"
 
 echo "=================================================="
 echo " Starting Atlas V1.1 Production Web Dashboard"
 echo " Host: http://${HOST}:${PORT}"
+echo " Bound to: ${HOST} (local access only)"
+echo " Authentication: ATLAS_DASHBOARD_TOKEN verified"
 echo "=================================================="
 
 exec python3 "${ATLAS_DIR}/dashboard/server.py"

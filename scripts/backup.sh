@@ -201,6 +201,8 @@ backup_single_app() {
   # Verify container is running
   if ! docker inspect "${container}" >/dev/null 2>&1; then
     log_error "Database container '${container}' was not found on this host."
+    send_atlas_notification "FAILURE" "Database Backup Failed" "Application: \`${app}\`\nContainer: \`${container}\`\nError: Container not found on host \`$(hostname)\`." || true
+    record_scheduler_run_result "failure" || true
     return 1
   fi
   
@@ -208,6 +210,8 @@ backup_single_app() {
   container_running="$(docker inspect --format '{{.State.Running}}' "${container}" 2>/dev/null || echo "false")"
   if [ "${container_running}" != "true" ]; then
     log_error "Database container '${container}' is not running."
+    send_atlas_notification "FAILURE" "Database Backup Failed" "Application: \`${app}\`\nContainer: \`${container}\`\nError: Container is not in running state on \`$(hostname)\`." || true
+    record_scheduler_run_result "failure" || true
     return 1
   fi
   
@@ -332,6 +336,7 @@ if [ "${ALL_APPS}" = "true" ]; then
   apps_list="$(list_registered_apps)"
   if [ -z "${apps_list}" ]; then
     log_error "No applications found in configuration registry."
+    record_scheduler_run_result "failure" || true
     exit 1
   fi
   
@@ -344,8 +349,11 @@ if [ "${ALL_APPS}" = "true" ]; then
   
   if [ "${failures}" -gt 0 ]; then
     log_error "Backup run completed with ${failures} failure(s)."
+    send_atlas_notification "FAILURE" "Atlas Batch Backup Failed" "Backup run completed with ${failures} failure(s) on host \`$(hostname)\`." || true
+    record_scheduler_run_result "failure" || true
     exit 1
   fi
+  record_scheduler_run_result "success" || true
   log_success "All registered application backups completed successfully."
   exit 0
 fi
@@ -356,4 +364,9 @@ if [ -z "${APP_TARGET}" ]; then
   exit 2
 fi
 
-backup_single_app "${APP_TARGET}"
+if backup_single_app "${APP_TARGET}"; then
+  record_scheduler_run_result "success" || true
+else
+  record_scheduler_run_result "failure" || true
+  exit 1
+fi

@@ -76,13 +76,27 @@ Backups follow an ISO-8601 UTC timestamp convention:
 
 ---
 
-## 5. Automated Cron Configuration
+## 5. Automated Scheduling: Systemd Timer (Recommended)
 
-Configure `/etc/cron.d/atlas-backups` or the host crontab to stagger backups across off-peak hours:
+Atlas utilizes native systemd timers (`systemd/atlas-backup.timer` and `systemd/atlas-backup.service`) as its primary production scheduler.
 
+### Enable the 6-Hour Persistent Timer
+```bash
+sudo systemctl enable --now atlas-backup.timer
+```
+
+### Inspect Timer State and Logs
+```bash
+systemctl list-timers atlas-backup.timer
+systemctl status atlas-backup.timer
+journalctl -u atlas-backup.service -n 100 --no-pager
+```
+
+With `Persistent=true`, missed backup schedules run immediately following server reboot or recovery from downtime.
+
+### Cron (Fallback Only)
+For non-systemd environments, configure crontab as a fallback:
 ```cron
-# Atlas Automated Daily Database Backups
-0 0 * * * root /path/to/atlas/scripts/backup.sh --app=app1 >> /var/log/atlas/backup-app1.log 2>&1
-0 1 * * * root /path/to/atlas/scripts/backup.sh --app=app2 >> /var/log/atlas/backup-app2.log 2>&1
-0 2 * * * root /path/to/atlas/scripts/backup.sh --app=app3 >> /var/log/atlas/backup-app3.log 2>&1
+# Atlas Automated Application Backups (Fallback only - does not catch up missed runs)
+0 0,6,12,18 * * * root /opt/atlas/scripts/backup.sh --all && /opt/atlas/scripts/sync-offsite.sh --all >> /var/log/atlas-backup.log 2>&1
 ```

@@ -203,12 +203,38 @@ Inspects CPU, memory, swap, disk capacity, Docker containers, Nginx reverse prox
 ```
 
 ### 4. Enable Native Systemd 6-Hour Persistent Timer
+Systemd is the recommended production scheduler for Atlas. The installer sets up the unit files automatically. To enable and verify the scheduler:
+
 ```bash
-sudo cp systemd/atlas-backup.service /etc/systemd/system/
-sudo cp systemd/atlas-backup.timer /etc/systemd/system/
-sudo systemctl daemon-reload
+# Enable and start the timer
 sudo systemctl enable --now atlas-backup.timer
+
+# Inspect timer schedule and status
+systemctl list-timers atlas-backup.timer
+systemctl status atlas-backup.timer
+
+# View backup service execution logs
+journalctl -u atlas-backup.service -n 100 --no-pager
 ```
+
+> **Note on Cron:** Cron is supported strictly as a fallback in environments without systemd. Cron does not provide persistent catch-up after downtime; if your server is offline during a cron interval, that backup is lost until the next cycle. Systemd's `Persistent=true` guarantees immediate catch-up upon boot.
+
+### 5. Access the Web Dashboard
+Atlas includes an internal dashboard service that binds strictly to `127.0.0.1:8888` by default and requires `ATLAS_DASHBOARD_TOKEN`.
+
+```bash
+# Verify dashboard health and system status
+curl -sS http://127.0.0.1:8888/api/health
+curl -sS http://127.0.0.1:8888/api/status
+
+# Access securely from your local workstation via SSH tunnel
+ssh -N -L 8888:127.0.0.1:8888 root@your-vps-ip
+```
+
+> **Security Warning:** Do not expose the dashboard publicly until a domain, reverse proxy (Nginx with TLS), and authentication strategy are configured.
+
+### 6. Alerting Notifications (Discord & Slack)
+Configure `ATLAS_DISCORD_WEBHOOK` or `ATLAS_SLACK_WEBHOOK` in `/opt/atlas/.env`. Atlas dispatches alerts on backup failure, R2 sync failure, restore-drill failure, and repeated scheduler failure. Webhook URLs are never exposed in logs, CLI output, UI, or Git. Success notifications remain disabled by default (`ATLAS_NOTIFY_SUCCESS=false`).
 
 ---
 

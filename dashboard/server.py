@@ -296,7 +296,9 @@ class AtlasDashboardHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        if parsed.path == "/api/status":
+        if parsed.path == "/api/health":
+            self.send_json({"status": "ok", "service": "atlas-dashboard", "host": HOST, "port": PORT})
+        elif parsed.path == "/api/status":
             self.send_json(get_system_summary())
         elif parsed.path == "/api/backups":
             self.send_json(get_backups_list())
@@ -397,6 +399,13 @@ class AtlasDashboardHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
 def main():
+    env = load_env()
+    token = os.environ.get("ATLAS_DASHBOARD_TOKEN") or env.get("ATLAS_DASHBOARD_TOKEN")
+    if not token or not token.strip():
+        sys.stderr.write("CRITICAL ERROR: ATLAS_DASHBOARD_TOKEN is not configured in environment or .env.\n")
+        sys.stderr.write("The Atlas Dashboard refuses to start without authentication configured.\n")
+        sys.exit(1)
+
     if not PUBLIC_DIR.exists():
         PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
     server_address = (HOST, PORT)
@@ -404,6 +413,8 @@ def main():
     print(f"==================================================")
     print(f" Atlas V1.1 Production Web Dashboard")
     print(f" Listening on: http://{HOST}:{PORT}")
+    print(f" Bound to localhost (127.0.0.1) for secure access.")
+    print(f" Authentication enforced via ATLAS_DASHBOARD_TOKEN.")
     print(f" Press Ctrl+C to terminate.")
     print(f"==================================================")
     try:

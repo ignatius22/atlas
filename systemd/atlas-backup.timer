@@ -1,0 +1,13 @@
+[Unit]
+Description=Atlas Automated 6-Hour Database Backup and Off-Site Sync Timer
+Documentation=https://github.com/ignatius22/atlas
+Requires=atlas-backup.service
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:00:00
+RandomizedDelaySec=300
+Persistent=true
+AccuracySec=1m
+
+[Install]
+WantedBy=timers.target
