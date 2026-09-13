@@ -142,7 +142,58 @@ set -e
 assert_eq 1 "${LOCK_RET}" "sync-offsite.sh refuses to run when mutex lock directory exists"
 rm -rf "${LOCK_DIR}"
 
-echo "=== 6. Test Suite Summary ==="
+echo "=== 6. Immutable Remote Reconciliation Tests ==="
+FAKE_BIN="${TMP_DIR}/fake-bin"
+mkdir -p "${FAKE_BIN}"
+cat << 'EOF_AGE' > "${FAKE_BIN}/age"
+#!/usr/bin/env bash
+set -eu
+output=""
+input=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) output="$2"; shift 2 ;;
+    -r|-R) shift 2 ;;
+    *) input="$1"; shift ;;
+  esac
+done
+cp "${input}" "${output}"
+EOF_AGE
+cat << 'EOF_RCLONE' > "${FAKE_BIN}/rclone"
+#!/usr/bin/env bash
+set -eu
+command="$1"
+remote="$2"
+name="${remote##*/}"
+case "${command}" in
+  lsf) printf '%s\n' "${name}" ;;
+  cat) printf '%064d  %s\n' 0 "${name%.sha256}" ;;
+  lsl) printf '1234 %s\n' "${name}" ;;
+  copyto) touch "${RCLONE_COPY_SENTINEL}"; exit 1 ;;
+  *) exit 1 ;;
+esac
+EOF_RCLONE
+chmod +x "${FAKE_BIN}/age" "${FAKE_BIN}/rclone"
+
+RCLONE_COPY_SENTINEL="${TMP_DIR}/unexpected-copyto"
+PATH="${FAKE_BIN}:${PATH}" \
+ATLAS_OFFSITE_PROVIDER=rclone \
+ATLAS_AGE_RECIPIENT=age1test \
+ATLAS_S3_BUCKET=test-bucket \
+RCLONE_COPY_SENTINEL="${RCLONE_COPY_SENTINEL}" \
+  "${ATLAS_ROOT}/scripts/sync-offsite.sh" --app=testapp --file="${MOCK_ARCHIVE}" >/dev/null 2>&1
+RECONCILE_RET=$?
+assert_eq 0 "${RECONCILE_RET}" "existing immutable object is reconciled without an overwrite"
+set +e
+test -e "${RCLONE_COPY_SENTINEL}"
+assert_eq 1 $? "reconciliation does not call rclone copyto"
+grep -q 'test-bucket/atlas-backups/testapp/2026/08/' "${MOCK_ARCHIVE}.synced"
+assert_eq 0 $? "remote prefix is derived from the backup timestamp"
+grep -q '"encrypted_bytes": 1234' "${MOCK_ARCHIVE}.synced"
+assert_eq 0 $? "durability marker records reconciled remote metadata"
+set -e
+
+echo "=== 7. Test Suite Summary ==="
 echo "Passed: ${PASSED}, Failed: ${FAILED}"
 if [ "${FAILED}" -gt 0 ]; then
   exit 1

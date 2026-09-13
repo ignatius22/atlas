@@ -214,9 +214,18 @@ EOF_META
   # Step 4: Upload to Cloud Object Storage
   local bucket="${ATLAS_S3_BUCKET:-${R2_BUCKET:-atlas-production-backups}}"
   local year_month
-  year_month="$(date -u +"%Y/%m")"
+  local backup_basename
+  backup_basename="$(basename "${backup_file}")"
+  if [[ "${backup_basename}" =~ ^${app}-([0-9]{4})([0-9]{2})[0-9]{2}T[0-9]{6}Z\.sql\.gz$ ]]; then
+    year_month="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+  else
+    year_month="$(date -u +"%Y/%m")"
+    log_warn "Could not derive archive month from '${backup_basename}'; using current UTC month (${year_month})."
+  fi
   local remote_prefix="atlas-backups/${app}/${year_month}"
   local remote_enc_name="$(basename "${encrypted_file}")"
+  local verified_enc_bytes="${enc_bytes}"
+  local verified_enc_sha="${enc_sha}"
   
   # Determine off-site provider
   local provider="${ATLAS_OFFSITE_PROVIDER:-auto}"
@@ -248,6 +257,28 @@ EOF_META
         export RCLONE_S3_ACCESS_KEY_ID="${ATLAS_S3_ACCESS_KEY:-${R2_ACCESS_KEY_ID:-}}"
         export RCLONE_S3_SECRET_ACCESS_KEY="${ATLAS_S3_SECRET_KEY:-${R2_SECRET_ACCESS_KEY:-}}"
         export RCLONE_S3_NO_CHECK_BUCKET="true"
+
+        # Object-lock buckets reject overwrites. A prior run may have uploaded the
+        # immutable ciphertext and then exited before creating the local marker.
+        # Reconcile that state before copyto; age ciphertext is randomized, so a
+        # fresh encryption of the same archive must never replace the old object.
+        if rclone lsf ":s3:${bucket}/${remote_prefix}/${remote_enc_name}" --s3-no-check-bucket 2>/dev/null | grep -q "^${remote_enc_name}$"; then
+          local remote_sha=""
+          local remote_size=""
+          remote_sha="$(rclone cat ":s3:${bucket}/${remote_prefix}/${remote_enc_name}.sha256" --s3-no-check-bucket 2>/dev/null | awk 'NR == 1 { print $1 }' || true)"
+          remote_size="$(rclone lsl ":s3:${bucket}/${remote_prefix}/${remote_enc_name}" --s3-no-check-bucket 2>/dev/null | awk 'NR == 1 { print $1 }' || true)"
+          if [[ "${remote_sha}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            verified_enc_sha="$(printf '%s' "${remote_sha}" | tr '[:upper:]' '[:lower:]')"
+          else
+            verified_enc_sha="unknown-preexisting-object"
+          fi
+          if [[ "${remote_size}" =~ ^[0-9]+$ ]]; then
+            verified_enc_bytes="${remote_size}"
+          fi
+          log_pass "Remote immutable object already exists; reconciled interrupted sync: ${remote_enc_name}"
+          sync_success=true
+          break
+        fi
         
         if ! rclone copyto "${encrypted_file}" ":s3:${bucket}/${remote_prefix}/${remote_enc_name}" --s3-no-check-bucket; then
           log_warn "rclone upload failed for ${remote_enc_name} (attempt ${attempt}/${max_attempts})"
@@ -283,6 +314,23 @@ EOF_META
         local endpoint_arg=()
         if [ -n "${ATLAS_S3_ENDPOINT:-}" ]; then
           endpoint_arg=(--endpoint-url "${ATLAS_S3_ENDPOINT}")
+        fi
+        if aws s3 ls "${endpoint_arg[@]}" "s3://${bucket}/${remote_prefix}/${remote_enc_name}" 2>/dev/null | grep -q "${remote_enc_name}$"; then
+          local remote_sha=""
+          local remote_size=""
+          remote_sha="$(aws s3 cp "${endpoint_arg[@]}" "s3://${bucket}/${remote_prefix}/${remote_enc_name}.sha256" - 2>/dev/null | awk 'NR == 1 { print $1 }' || true)"
+          remote_size="$(aws s3 ls "${endpoint_arg[@]}" "s3://${bucket}/${remote_prefix}/${remote_enc_name}" 2>/dev/null | awk 'NR == 1 { print $3 }' || true)"
+          if [[ "${remote_sha}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            verified_enc_sha="$(printf '%s' "${remote_sha}" | tr '[:upper:]' '[:lower:]')"
+          else
+            verified_enc_sha="unknown-preexisting-object"
+          fi
+          if [[ "${remote_size}" =~ ^[0-9]+$ ]]; then
+            verified_enc_bytes="${remote_size}"
+          fi
+          log_pass "Remote immutable object already exists; reconciled interrupted sync: ${remote_enc_name}"
+          sync_success=true
+          break
         fi
         if ! aws s3 cp "${endpoint_arg[@]}" "${encrypted_file}" "s3://${bucket}/${remote_prefix}/${remote_enc_name}"; then
           upload_ok=false
@@ -353,8 +401,8 @@ EOF_META
   "source_file": "$(basename "${backup_file}")",
   "encrypted_file": "${remote_enc_name}",
   "remote_destination": "s3://${bucket}/${remote_prefix}/${remote_enc_name}",
-  "encrypted_bytes": ${enc_bytes},
-  "encrypted_sha256": "${enc_sha}",
+  "encrypted_bytes": ${verified_enc_bytes},
+  "encrypted_sha256": "${verified_enc_sha}",
   "verified": true
 }
 EOF_SYNC
