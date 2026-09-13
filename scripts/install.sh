@@ -25,8 +25,12 @@ if [ ! -f "${SOURCE_ROOT}/infra/atlas-dashboard.service" ]; then
 fi
 
 mkdir -p "${INSTALL_DIR}"
-# Copy all files including dotfiles from repository root
-cp -a "${SOURCE_ROOT}/." "${INSTALL_DIR}/"
+# Copy files only if source and target directories are distinct
+REAL_SOURCE="$(cd "${SOURCE_ROOT}" && pwd -P)"
+REAL_TARGET="$(cd "${INSTALL_DIR}" && pwd -P)"
+if [ "${REAL_SOURCE}" != "${REAL_TARGET}" ]; then
+  cp -a "${SOURCE_ROOT}/." "${INSTALL_DIR}/"
+fi
 
 mkdir -p "$(dirname "${BIN_LINK}")"
 ln -sf "${INSTALL_DIR}/bin/atlas" "${BIN_LINK}"
