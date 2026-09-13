@@ -86,6 +86,46 @@ def validate_app_name(app_val, allow_all=True):
         return False, None, "Invalid application identifier format. Only alphanumeric, dashes, and underscores allowed."
     return True, app_str, ""
 
+def get_registered_apps():
+    """Discover registered applications and their database containers."""
+    apps = {}
+    apps_yml = BASE_DIR / "config" / "apps.yml"
+    if not apps_yml.exists():
+        apps_yml = BASE_DIR / "config" / "apps.example.yml"
+    if apps_yml.exists():
+        try:
+            import yaml
+            with open(apps_yml, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+                if isinstance(data, dict) and "apps" in data:
+                    for app_id, app_info in data["apps"].items():
+                        container = app_info.get("database", {}).get("container", f"{app_id}_postgres")
+                        apps[app_id] = container
+        except Exception:
+            pass
+
+    default_apps = {
+        "catalogflow": "catalogflow_postgres",
+        "sand2keys": "sand2keys-db",
+        "wdni": "wdni_prod_postgres",
+        "experimentlab": "experimentlab_postgres"
+    }
+    for k, v in default_apps.items():
+        if k not in apps:
+            apps[k] = v
+
+    backup_base = Path("/var/backups")
+    if backup_base.exists():
+        try:
+            for p in backup_base.iterdir():
+                if p.is_dir() and p.name not in {"lost+found", "offsite-mock"}:
+                    if p.name not in apps:
+                        apps[p.name] = f"{p.name}_postgres"
+        except Exception:
+            pass
+
+    return apps
+
 def get_system_summary():
     """Retrieve comprehensive system metrics and database container statuses."""
     env = load_env()
@@ -99,7 +139,8 @@ def get_system_summary():
 
     # Containers Status
     containers = []
-    target_containers = ["catalogflow_postgres", "sand2keys-db", "wdni_prod_postgres"]
+    app_map = get_registered_apps()
+    target_containers = list(app_map.values())
     fmt = '{"id":"{{.Id}}","status":"{{.State.Status}}","started":"{{.State.StartedAt}}","health":"{{if .State.Health}}{{.State.Health.Status}}{{else}}n/a{{end}}"}'
     for name in target_containers:
         code, out, _ = run_cmd(["docker", "inspect", name, "--format", fmt], timeout=10)
@@ -193,7 +234,7 @@ def get_system_summary():
 
 def get_backups_list():
     """List all local backup files across applications."""
-    apps = ["catalogflow", "sand2keys", "wdni"]
+    apps = list(get_registered_apps().keys())
     result = {}
 
     for app in apps:
