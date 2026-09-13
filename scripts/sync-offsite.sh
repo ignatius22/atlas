@@ -212,12 +212,24 @@ sync_single_file() {
 EOF_META
 
   # Step 4: Upload to Cloud Object Storage
-  local bucket="${ATLAS_S3_BUCKET:-atlas-production-backups}"
+  local bucket="${ATLAS_S3_BUCKET:-${R2_BUCKET:-atlas-production-backups}}"
   local year_month
   year_month="$(date -u +"%Y/%m")"
   local remote_prefix="atlas-backups/${app}/${year_month}"
   local remote_enc_name="$(basename "${encrypted_file}")"
   
+  # Determine off-site provider
+  local provider="${ATLAS_OFFSITE_PROVIDER:-auto}"
+  if [ "${provider}" = "auto" ] || [ "${provider}" = "r2" ] || [ "${provider}" = "s3" ]; then
+    if command -v rclone >/dev/null 2>&1; then
+      provider="rclone"
+    elif command -v aws >/dev/null 2>&1; then
+      provider="aws"
+    else
+      provider="rclone"
+    fi
+  fi
+
   # Step 4 & 5: Upload to Cloud Object Storage with Bounded Retry (Max 3 attempts, exponential backoff)
   local max_attempts=3
   local attempt=1
@@ -232,9 +244,9 @@ EOF_META
       rclone)
         require_cmd rclone
         export RCLONE_S3_PROVIDER="${ATLAS_S3_PROVIDER:-Cloudflare}"
-        export RCLONE_S3_ENDPOINT="${ATLAS_S3_ENDPOINT:-}"
-        export RCLONE_S3_ACCESS_KEY_ID="${ATLAS_S3_ACCESS_KEY:-}"
-        export RCLONE_S3_SECRET_ACCESS_KEY="${ATLAS_S3_SECRET_KEY:-}"
+        export RCLONE_S3_ENDPOINT="${ATLAS_S3_ENDPOINT:-${R2_ENDPOINT:-}}"
+        export RCLONE_S3_ACCESS_KEY_ID="${ATLAS_S3_ACCESS_KEY:-${R2_ACCESS_KEY_ID:-}}"
+        export RCLONE_S3_SECRET_ACCESS_KEY="${ATLAS_S3_SECRET_KEY:-${R2_SECRET_ACCESS_KEY:-}}"
         export RCLONE_S3_NO_CHECK_BUCKET="true"
         
         if ! rclone copyto "${encrypted_file}" ":s3:${bucket}/${remote_prefix}/${remote_enc_name}" --s3-no-check-bucket; then
