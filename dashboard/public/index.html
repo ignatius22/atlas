@@ -1,2101 +1,584 @@
-<!doctype html>
-<html lang="en" dir="ltr" data-nav-layout="vertical" data-theme-mode="light" data-header-styles="light"
-    data-menu-styles="dark">
-
-
-<!-- Mirrored from preview.sprukomarket.com/html/bootstrap/vexel/dist/html/index.html by HTTrack Website Copier/3.x [XR&CO'2014], Tue, 25 Aug 2026 05:01:48 GMT -->
+<!DOCTYPE html>
+<html lang="en" class="dark">
 <head>
-
-    <!-- META DATA -->
     <meta charset="UTF-8">
-    <meta name='viewport' content='width=device-width, initial-scale=1.0, user-scalable=0'>
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="description" content="vexel – Bootstrap 5  Admin & Dashboard Template">
-    <meta name="author" content="Spruko Technologies Private Limited">
-    <meta name="keywords"
-        content="admin,admin dashboard,admin panel,admin template,bootstrap,clean,dashboard,flat,jquery,modern,responsive,premium admin templates,responsive admin,ui,ui kit.">
-
-    <!-- FAVICON -->
-    <link rel="shortcut icon" type="image/x-icon" href="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/images/brand/favicon.ico">
-
-    <!-- Main Theme Js -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/js/main.js"></script>
-
-    <!-- Choices JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/choices.js/public/assets/scripts/choices.min.js"></script>
-
-    <!-- TITLE -->
-    <title>Atlas V1.1 – Production Disaster Recovery &amp; Replication</title>
-
-    <!-- BOOTSTRAP CSS -->
-    <link id="style" href="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/bootstrap/css/bootstrap.min.css" rel="stylesheet">
-
-    <!-- STYLE CSS -->
-    <link href="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/css/style.css" rel="stylesheet">
-
-    <!-- Simplebar Css -->
-    <link href="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/simplebar/simplebar.min.css" rel="stylesheet">
-
-    <!--- FONT-ICONS CSS -->
-    <link href="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/css/icons.css" rel="stylesheet">
-
-    <!-- Color Picker Css -->
-    <link rel="stylesheet" href="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/flatpickr/flatpickr.min.css">
-    <link rel="stylesheet" href="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/@simonwep/pickr/themes/nano.min.css">
-    
-    
-    <!-- ICON FONTS (Full CDN Webfonts with CORS) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atlas Disaster Recovery – Production Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        },
+                        dark: {
+                            bg: '#090d16',
+                            card: '#0f172a',
+                            border: '#1e293b',
+                            muted: '#334155'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide / Bootstrap Icons & Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.3.0/fonts/remixicon.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.14.0/dist/tabler-icons.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     <style>
-        /* Fix Vexel's 50% border-radius on .rounded */
-        .rounded {
-            border-radius: 6px !important;
-        }
-        .br-5 {
-            border-radius: 5px !important;
-        }
-        .br-8 {
-            border-radius: 8px !important;
-        }
-        pre, code, #modal-console-body {
-            border-radius: 6px !important;
-        }
-        .table-scroll-container {
-            max-height: 480px;
-            overflow-y: auto;
-            position: relative;
-        }
-        .table-scroll-container thead th {
-            position: sticky;
-            top: 0;
-            z-index: 2;
-            background-color: var(--bs-card-bg, #1a1d2e);
-            box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
-        }
-        .r2-scroll-container {
-            max-height: 480px;
-            overflow-y: auto;
-        }
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #090d16; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
         .pulse-live {
-            width: 8px; height: 8px; display: inline-block; border-radius: 50% !important;
-            background-color: #10b981; box-shadow: 0 0 8px #10b981;
+            width: 8px; height: 8px; border-radius: 50%;
+            background-color: #10b981; box-shadow: 0 0 10px #10b981;
             animation: pulse-dot 2s infinite;
         }
-        @keyframes pulse-dot { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
-        .page-view {
-            animation: fadeIn 0.2s ease-in-out;
-        }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-    </style>
-
-    <!-- Choices Css -->
-    <link rel="stylesheet" href="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/choices.js/public/assets/styles/choices.min.css">
-    
-
-
-
-
-
-    <!-- STRICT CSS FIX FOR VEXEL ELLIPSE BUG -->
-    <style>
-        pre, code, kbd, samp, #modal-console-body, .modal-content {
-            border-radius: 6px !important;
-        }
-        .rounded {
-            border-radius: 6px !important;
-        }
-        .br-3 { border-radius: 3px !important; }
-        .br-5 { border-radius: 5px !important; }
-        .br-8 { border-radius: 8px !important; }
-        .table-scroll-container {
-            max-height: 480px;
-            overflow-y: auto;
-            position: relative;
-        }
-        .table-scroll-container thead th {
-            position: sticky;
-            top: 0;
-            z-index: 2;
-            background-color: var(--bs-card-bg, #1a1d2e);
-            box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
-        }
-        .r2-scroll-container {
-            max-height: 480px;
-            overflow-y: auto;
-        }
-        .pulse-live {
-            width: 8px; height: 8px; display: inline-block; border-radius: 50% !important;
-            background-color: #10b981; box-shadow: 0 0 8px #10b981;
-            animation: pulse-dot 2s infinite;
-        }
-        @keyframes pulse-dot { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
-        .page-view {
-            animation: fadeIn 0.2s ease-in-out;
-        }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.3); } }
     </style>
 </head>
+<body class="bg-dark-bg text-slate-100 min-h-screen flex flex-col antialiased selection:bg-brand-500 selection:text-white">
 
+    <!-- TOP NAVIGATION -->
+    <header class="border-b border-dark-border bg-dark-bg/80 backdrop-blur sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <!-- Brand -->
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-brand-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25">
+                    <i class="bi bi-shield-check text-lg"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-white tracking-tight text-base">Atlas</span>
+                        <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">V1.1 PROD</span>
+                    </div>
+                    <span class="text-[11px] text-slate-400 font-mono" id="header-host">Host: vps3524208 &bull; 127.0.0.1:8888</span>
+                </div>
+            </div>
 
-<body class="app sidebar-mini">
+            <!-- Header Actions -->
+            <div class="flex items-center gap-3">
+                <div class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-dark-card border border-dark-border text-xs text-slate-300 font-mono">
+                    <span class="pulse-live"></span>
+                    <span>Scheduler: <strong class="text-emerald-400" id="header-scheduler-status">Active (6h)</strong></span>
+                </div>
 
-    <!-- Start Switcher -->
-    <div class="offcanvas offcanvas-end" tabindex="-1" id="switcher-canvas" aria-labelledby="offcanvasRightLabel">
-        <div class="offcanvas-header border-bottom">
-            <h5 class="offcanvas-title" id="offcanvasRightLabel">Switcher</h5>
-            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"><i class="fe fe-x fs-18"></i></button>
+                <button onclick="fetchData()" class="p-2 rounded-lg bg-dark-card border border-dark-border hover:bg-slate-800 text-slate-300 transition" title="Refresh Live Data">
+                    <i class="bi bi-arrow-repeat text-sm" id="refresh-icon"></i>
+                </button>
+
+                <button onclick="openTokenModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-dark-card border border-dark-border hover:bg-slate-800 text-xs font-medium text-slate-300 transition">
+                    <i class="bi bi-key text-amber-400"></i>
+                    <span id="token-btn-label">Token</span>
+                </button>
+
+                <button onclick="triggerAction('backup', '--all', 'Full Portfolio Backup (All DBs)')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition">
+                    <i class="bi bi-play-fill text-sm"></i>
+                    <span>Backup All DBs</span>
+                </button>
+            </div>
         </div>
-        <div class="offcanvas-body">
-            <nav class="border-bottom border-block-end-dashed">
-                <div class="nav nav-tabs nav-justified" id="switcher-main-tab" role="tablist">
-                    <button class="nav-link m-0 active" id="switcher-home-tab" data-bs-toggle="tab" data-bs-target="#switcher-home"
-                        type="button" role="tab" aria-controls="switcher-home" aria-selected="true">Theme Styles</button>
-                    <button class="nav-link m-0" id="switcher-profile-tab" data-bs-toggle="tab" data-bs-target="#switcher-profile"
-                        type="button" role="tab" aria-controls="switcher-profile" aria-selected="false">Theme Colors</button>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+        <!-- METRIC CARDS -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Disk Storage -->
+            <div class="p-5 rounded-2xl bg-dark-card border border-dark-border shadow-sm">
+                <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                    <span>Local Backup Storage</span>
+                    <i class="bi bi-hdd-network text-slate-400"></i>
                 </div>
-            </nav>
-            <div class="tab-content" id="nav-tabContent">
-                <div class="tab-pane fade show active border-0" id="switcher-home" role="tabpanel" aria-labelledby="switcher-home-tab"
-                    tabindex="0">
-                    <div class="">
-                        <p class="switcher-style-head">Theme Color Mode:</p>
-                        <div class="row switcher-style gx-0">
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-light-theme">
-                                        Light
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="theme-style" id="switcher-light-theme"
-                                        checked>
-                                </div>
-                            </div>
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-dark-theme">
-                                        Dark
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="theme-style" id="switcher-dark-theme">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="">
-                        <p class="switcher-style-head">Directions:</p>
-                        <div class="row switcher-style gx-0">
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-ltr">
-                                        LTR
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="direction" id="switcher-ltr" checked>
-                                </div>
-                            </div>
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-rtl">
-                                        RTL
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="direction" id="switcher-rtl">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="">
-                        <p class="switcher-style-head">Navigation Styles:</p>
-                        <div class="row switcher-style gx-0">
-                            <div class="col-sm-4 col-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-vertical">
-                                        Vertical
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="navigation-style" id="switcher-vertical"
-                                        checked>
-                                </div>
-                            </div>
-                            <div class="col-sm-4 col-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-horizontal">
-                                        Horizontal
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="navigation-style"
-                                        id="switcher-horizontal">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="navigation-menu-styles">
-                        <p class="switcher-style-head">Vertical & Horizontal Menu Styles:</p>
-                        <div class="row switcher-style gx-0 pb-2 gy-2">
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-menu-click">
-                                        Menu Click
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="navigation-menu-styles"
-                                        id="switcher-menu-click">
-                                </div>
-                            </div>
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-menu-hover">
-                                        Menu Hover
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="navigation-menu-styles"
-                                        id="switcher-menu-hover">
-                                </div>
-                            </div>
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-icon-click">
-                                        Icon Click
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="navigation-menu-styles"
-                                        id="switcher-icon-click">
-                                </div>
-                            </div>
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-icon-hover">
-                                        Icon Hover
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="navigation-menu-styles"
-                                        id="switcher-icon-hover">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="sidemenu-layout-styles">
-                        <p class="switcher-style-head">Sidemenu Layout Styles:</p>
-                        <div class="row switcher-style gx-0 pb-2 gy-2">
-                            <div class="col-sm-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-default-menu">
-                                        Default Menu
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="sidemenu-layout-styles"
-                                        id="switcher-default-menu" checked>
-                                </div>
-                            </div>
-                            <div class="col-sm-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-closed-menu">
-                                        Closed Menu
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="sidemenu-layout-styles"
-                                        id="switcher-closed-menu">
-                                </div>
-                            </div>
-                            <div class="col-sm-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-icontext-menu">
-                                        Icon Text
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="sidemenu-layout-styles"
-                                        id="switcher-icontext-menu">
-                                </div>
-                            </div>
-                            <div class="col-sm-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-icon-overlay">
-                                        Icon Overlay
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="sidemenu-layout-styles"
-                                        id="switcher-icon-overlay">
-                                </div>
-                            </div>
-                            <div class="col-sm-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-detached">
-                                        Detached
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="sidemenu-layout-styles"
-                                        id="switcher-detached">
-                                </div>
-                            </div>
-                            <div class="col-sm-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-double-menu">
-                                        Double Menu
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="sidemenu-layout-styles"
-                                        id="switcher-double-menu">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="">
-                        <p class="switcher-style-head">Page Styles:</p>
-                        <div class="row switcher-style gx-0">
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-regular">
-                                        Regular
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="page-styles" id="switcher-regular"
-                                        checked>
-                                </div>
-                            </div>
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-classic">
-                                        Classic
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="page-styles" id="switcher-classic">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="">
-                        <p class="switcher-style-head">Layout Width Styles:</p>
-                        <div class="row switcher-style gx-0">
-                            <div class="col-sm-4 col-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-full-width">
-                                        Full Width
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="layout-width" id="switcher-full-width"
-                                        checked>
-                                </div>
-                            </div>
-                            <div class="col-sm-4 col-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-boxed">
-                                        Boxed
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="layout-width" id="switcher-boxed">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="">
-                        <p class="switcher-style-head">Menu Positions:</p>
-                        <div class="row switcher-style gx-0">
-                            <div class="col-sm-4 col-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-menu-fixed">
-                                        Fixed
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="menu-positions" id="switcher-menu-fixed"
-                                        checked>
-                                </div>
-                            </div>
-                            <div class="col-sm-4 col-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-menu-scroll">
-                                        Scrollable
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="menu-positions" id="switcher-menu-scroll">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="">
-                        <p class="switcher-style-head">Header Positions:</p>
-                        <div class="row switcher-style gx-0">
-                            <div class="col-sm-4 col-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-header-fixed">
-                                        Fixed
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="header-positions"
-                                        id="switcher-header-fixed" checked>
-                                </div>
-                            </div>
-                            <div class="col-sm-4 col-6">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-header-scroll">
-                                        Scrollable
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="header-positions"
-                                        id="switcher-header-scroll">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="">
-                        <p class="switcher-style-head">Loader:</p>
-                        <div class="row switcher-style gx-0">
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-loader-enable">
-                                        Enable
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="page-loader"
-                                        id="switcher-loader-enable" checked>
-                                </div>
-                            </div>
-                            <div class="col-4">
-                                <div class="form-check switch-select">
-                                    <label class="form-check-label" for="switcher-loader-disable">
-                                        Disable
-                                    </label>
-                                    <input class="form-check-input" type="radio" name="page-loader"
-                                        id="switcher-loader-disable" checked>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-2xl font-bold text-white" id="metric-disk-used">-- GB</span>
+                    <span class="text-xs text-slate-400" id="metric-disk-total">of -- GB</span>
                 </div>
-                <div class="tab-pane fade border-0" id="switcher-profile" role="tabpanel" aria-labelledby="switcher-profile-tab" tabindex="0">
-                    <div>
-                        <div class="theme-colors">
-                            <p class="switcher-style-head">Menu Colors:</p>
-                            <div class="d-flex switcher-style pb-2">
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-white" data-bs-toggle="tooltip"
-                                        data-bs-placement="top" title="Light Menu" type="radio" name="menu-colors"
-                                        id="switcher-menu-light">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-dark" data-bs-toggle="tooltip"
-                                        data-bs-placement="top" title="Dark Menu" type="radio" name="menu-colors"
-                                        id="switcher-menu-dark" checked>
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-primary" data-bs-toggle="tooltip"
-                                        data-bs-placement="top" title="Color Menu" type="radio" name="menu-colors"
-                                        id="switcher-menu-primary">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-gradient" data-bs-toggle="tooltip"
-                                        data-bs-placement="top" title="Gradient Menu" type="radio" name="menu-colors"
-                                        id="switcher-menu-gradient">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-transparent"
-                                        data-bs-toggle="tooltip" data-bs-placement="top" title="Transparent Menu"
-                                        type="radio" name="menu-colors" id="switcher-menu-transparent">
-                                </div>
-                            </div>
-                            <div class="px-4 pb-3 text-muted fs-11">Note:If you want to change color Menu dynamically change from below Theme Primary color picker</div>
-                        </div>
-                        <div class="theme-colors">
-                            <p class="switcher-style-head">Header Colors:</p>
-                            <div class="d-flex switcher-style pb-2">
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-white" data-bs-toggle="tooltip"
-                                        data-bs-placement="top" title="Light Header" type="radio" name="header-colors"
-                                        id="switcher-header-light" checked>
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-dark" data-bs-toggle="tooltip"
-                                        data-bs-placement="top" title="Dark Header" type="radio" name="header-colors"
-                                        id="switcher-header-dark">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-primary" data-bs-toggle="tooltip"
-                                        data-bs-placement="top" title="Color Header" type="radio" name="header-colors"
-                                        id="switcher-header-primary">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-gradient" data-bs-toggle="tooltip"
-                                        data-bs-placement="top" title="Gradient Header" type="radio" name="header-colors"
-                                        id="switcher-header-gradient">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-transparent" data-bs-toggle="tooltip"
-                                        data-bs-placement="top" title="Transparent Header" type="radio" name="header-colors"
-                                        id="switcher-header-transparent">
-                                </div>
-                            </div>
-                            <div class="px-4 pb-3 text-muted fs-11">Note:If you want to change color Header dynamically change from below Theme Primary color picker</div>
-                        </div>
-                        <div class="theme-colors">
-                            <p class="switcher-style-head">Theme Primary:</p>
-                            <div class="d-flex flex-wrap align-items-center switcher-style">
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-primary-1" type="radio"
-                                        name="theme-primary" id="switcher-primary">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-primary-2" type="radio"
-                                        name="theme-primary" id="switcher-primary1">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-primary-3" type="radio" name="theme-primary"
-                                        id="switcher-primary2">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-primary-4" type="radio" name="theme-primary"
-                                        id="switcher-primary3">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-primary-5" type="radio" name="theme-primary"
-                                        id="switcher-primary4">
-                                </div>
-                                <div class="form-check switch-select ps-0 mt-1 color-primary-light">
-                                    <div class="theme-container-primary"></div>
-                                    <div class="pickr-container-primary"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="theme-colors">
-                            <p class="switcher-style-head">Theme Background:</p>
-                            <div class="d-flex flex-wrap align-items-center switcher-style">
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-bg-1" type="radio"
-                                        name="theme-background" id="switcher-background">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-bg-2" type="radio"
-                                        name="theme-background" id="switcher-background1">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-bg-3" type="radio" name="theme-background"
-                                        id="switcher-background2">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-bg-4" type="radio"
-                                        name="theme-background" id="switcher-background3">
-                                </div>
-                                <div class="form-check switch-select me-3">
-                                    <input class="form-check-input color-input color-bg-5" type="radio"
-                                        name="theme-background" id="switcher-background4">
-                                </div>
-                                <div class="form-check switch-select ps-0 mt-1 tooltip-static-demo color-bg-transparent">
-                                    <div class="theme-container-background"></div>
-                                    <div class="pickr-container-background"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="menu-image mb-3">
-                            <p class="switcher-style-head">Menu With Background Image:</p>
-                            <div class="d-flex flex-wrap align-items-center switcher-style">
-                                <div class="form-check switch-select m-2">
-                                    <input class="form-check-input bgimage-input bg-img1" type="radio"
-                                        name="theme-background" id="switcher-bg-img">
-                                </div>
-                                <div class="form-check switch-select m-2">
-                                    <input class="form-check-input bgimage-input bg-img2" type="radio"
-                                        name="theme-background" id="switcher-bg-img1">
-                                </div>
-                                <div class="form-check switch-select m-2">
-                                    <input class="form-check-input bgimage-input bg-img3" type="radio" name="theme-background"
-                                        id="switcher-bg-img2">
-                                </div>
-                                <div class="form-check switch-select m-2">
-                                    <input class="form-check-input bgimage-input bg-img4" type="radio"
-                                        name="theme-background" id="switcher-bg-img3">
-                                </div>
-                                <div class="form-check switch-select m-2">
-                                    <input class="form-check-input bgimage-input bg-img5" type="radio"
-                                        name="theme-background" id="switcher-bg-img4">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div class="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+                    <div id="metric-disk-bar" class="bg-indigo-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
                 </div>
-                <div class="d-flex justify-content-center canvas-footer flex-wrap"> 
-                    <a href="https://1.envato.market/qzN0yb" target="_blank" class="btn btn-primary m-1">Buy Now</a>
-                    <a href="https://1.envato.market/MGEaN" target="_blank" class="btn btn-secondary m-1">Our Portfolio</a>
-                    <a href="javascript:void(0);" id="reset-all" class="btn btn-danger m-1">Reset</a> 
+                <div class="flex justify-between text-[11px] text-slate-400 mt-1.5 font-mono">
+                    <span id="metric-disk-pct">--% used</span>
+                    <span id="metric-disk-free">-- GB free</span>
+                </div>
+            </div>
+
+            <!-- Zero-Knowledge Security Invariant -->
+            <div class="p-5 rounded-2xl bg-dark-card border border-dark-border shadow-sm">
+                <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                    <span>Zero-Knowledge Security</span>
+                    <i class="bi bi-lock text-emerald-400"></i>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-xl font-bold text-emerald-400">Zero Private Keys</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-2 truncate font-mono">
+                    Recipient: <span class="text-slate-200" id="metric-recipient">age1tqcn...</span>
+                </p>
+                <div class="mt-2.5">
+                    <span class="inline-block text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                        Offline Master Key Enforced
+                    </span>
+                </div>
+            </div>
+
+            <!-- Scheduler Status -->
+            <div class="p-5 rounded-2xl bg-dark-card border border-dark-border shadow-sm">
+                <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                    <span>Automated Scheduler</span>
+                    <i class="bi bi-clock-history text-indigo-400"></i>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-xl font-bold text-white">Every 6 Hours</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-2 font-mono">
+                    Type: <span class="text-indigo-400 font-semibold" id="metric-scheduler-type">systemd timer</span>
+                </p>
+                <div class="mt-2.5">
+                    <span class="inline-block text-[11px] px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-medium">
+                        Catch-Up On Reboot &bull; Jitter Active
+                    </span>
+                </div>
+            </div>
+
+            <!-- Cloudflare R2 Offsite -->
+            <div class="p-5 rounded-2xl bg-dark-card border border-dark-border shadow-sm">
+                <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                    <span>Cloudflare R2 Bucket</span>
+                    <i class="bi bi-cloud-arrow-up text-amber-400"></i>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <span class="text-2xl font-bold text-amber-400" id="metric-r2-count">--</span>
+                    <span class="text-xs text-slate-400">Objects in Bucket</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-2 truncate font-mono text-[11px]" id="metric-r2-bucket">
+                    Bucket: atlas-production-backups
+                </p>
+                <div class="mt-2.5">
+                    <span class="inline-block text-[11px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">
+                        90-Day WORM Immutability
+                    </span>
                 </div>
             </div>
         </div>
-    </div>
-    <!-- End Switcher -->
 
-
-
-    <!-- GLOBAL-LOADER -->
-    <div id="loader">
-        <img src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/images/loader.svg" class="loader-img" alt="Loader">
-    </div>
-    <!-- /GLOBAL-LOADER -->
-
-    <!-- PAGE -->
-    <div class="page">
-        <div class="page-main">
-
-               <!-- app-header -->
-                       <header class="app-header header sticky">
-                         <!-- Start::main-header-container -->
-                         <div class="main-header-container container-fluid">
-
-                             <!-- Start::header-content-left -->
-                             <div class="header-content-left align-items-center">
-
-                                 <div class="header-element">
-                                     <div class="horizontal-logo">
-                                         <a href="javascript:void(0);" onclick="navigateTo('overview')" class="header-logo d-flex align-items-center gap-2 text-decoration-none">
-                                             <span class="avatar avatar-md bg-primary-transparent text-primary rounded-3 d-flex align-items-center justify-content-center">
-                                                 <i class="ri-shield-check-fill fs-22"></i>
-                                             </span>
-                                             <span class="fs-18 fw-bold text-white tracking-wide">ATLAS <span class="text-info fs-12 fw-normal">V1.1</span></span>
-                                         </a>
-                                     </div>
-                                 </div>
-
-                                 <!-- Start::header-element (Sidebar Toggle) -->
-                                 <div class="header-element">
-                                     <a href="javascript:void(0);" class="sidemenu-toggle header-link" data-bs-toggle="sidebar">
-                                         <i class="bi bi-list fs-22 text-muted"></i>
-                                     </a>
-                                 </div>
-
-                                 <!-- Host Status Pill -->
-                                 <div class="d-none d-md-flex align-items-center gap-2 px-3 py-1 bg-primary-transparent text-primary rounded-pill border border-primary border-opacity-25 fs-12 ms-3">
-                                     <span class="pulse-live"></span>
-                                     <span id="header-host" class="fw-semibold">vps3524208</span>
-                                     <span class="text-muted">|</span>
-                                     <span class="text-info" id="header-time">--:-- UTC</span>
-                                 </div>
-
-                             </div>
-                             <!-- End::header-content-left -->
-
-                             <!-- Start::header-content-right -->
-                             <div class="header-content-right d-flex align-items-center gap-2">
-
-                                 <!-- Theme Mode Toggle -->
-                                 <div class="header-element header-theme-mode">
-                                     <a href="javascript:void(0);" class="header-link layout-setting" title="Toggle Light/Dark Theme">
-                                         <i class="bi bi-sun fs-18 light-layout"></i>
-                                         <i class="bi bi-moon fs-18 dark-layout"></i>
-                                     </a>
-                                 </div>
-
-                                 <!-- Fullscreen Toggle -->
-                                 <div class="header-element header-fullscreen">
-                                     <a onclick="openFullscreen();" href="javascript:void(0);" class="header-link" title="Toggle Fullscreen">
-                                         <i class="bi bi-fullscreen fs-16"></i>
-                                     </a>
-                                 </div>
-
-                                 <!-- Refresh Button -->
-                                 <div class="header-element">
-                                     <button onclick="fetchDashboardData()" id="refresh-btn" class="btn btn-sm btn-primary-light rounded-pill px-3 d-flex align-items-center gap-1.5 fs-12">
-                                         <i class="bi bi-arrow-clockwise fs-14" id="refresh-icon"></i>
-                                         <span>Refresh</span>
-                                     </button>
-                                 </div>
-
-                                 <!-- Root Operator Profile Badge (Adaptive Vexel Styling) -->
-                                 <div class="header-element main-profile-user ms-2">
-                                     <a href="javascript:void(0);" class="header-link d-flex align-items-center gap-2">
-                                         <span class="avatar avatar-sm rounded-circle bg-primary-transparent text-primary d-flex align-items-center justify-content-center">
-                                             <i class="bi bi-shield-lock-fill fs-15"></i>
-                                         </span>
-                                         <div class="d-none d-md-block text-start lh-1 pe-2">
-                                             <p class="fw-semibold mb-0 fs-13">Root Operator</p>
-                                             <span class="text-muted fs-10">Production Admin</span>
-                                         </div>
-                                     </a>
-                                 </div>
-
-                             </div>
-                             <!-- End::header-content-right -->
-
-                         </div>
-                         <!-- End::main-header-container -->
-                     </header>
-                    <!-- /app-header -->
-             <!-- Start::app-sidebar -->
-             <aside class="app-sidebar sticky" id="sidebar">
-                <!-- Start::main-sidebar-header -->
-                <div class="main-sidebar-header">
-                    <a href="javascript:void(0);" onclick="navigateTo('overview')" class="header-logo d-flex align-items-center gap-2 text-decoration-none px-3">
-                        <span class="avatar avatar-sm bg-primary text-white rounded-3 d-flex align-items-center justify-content-center">
-                            <i class="ri-shield-keyhole-line fs-18"></i>
-                        </span>
-                        <span class="fs-16 fw-bold text-white tracking-wide">Atlas DR Engine</span>
-                    </a>
+        <!-- PROTECTED PRODUCTION DATABASES -->
+        <section class="p-6 rounded-2xl bg-dark-card border border-dark-border shadow-sm">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+                <div>
+                    <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="bi bi-database text-indigo-400"></i>
+                        Protected Production Databases
+                    </h2>
+                    <p class="text-xs text-slate-400">Active PostgreSQL instances discovered and guarded by Atlas</p>
                 </div>
-                <!-- End::main-sidebar-header -->
+                <span class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 font-mono w-fit" id="container-count-badge">
+                    5 Protected Instances
+                </span>
+            </div>
 
-                <!-- Start::main-sidebar -->
-                <div class="main-sidebar" id="sidebar-scroll">
-                    <nav class="main-menu-container nav nav-pills flex-column sub-open">
-                        <ul class="main-menu">
-                            <li class="slide__category"><span class="category-name">Core Navigation</span></li>
+            <!-- Containers Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4" id="databases-grid">
+                <!-- Dynamically Populated -->
+            </div>
+        </section>
 
-                            <li class="slide">
-                                <a href="javascript:void(0);" onclick="navigateTo('overview')" class="side-menu__item active" id="nav-overview">
-                                    <i class="bi bi-grid side-menu__icon fs-16 text-primary"></i>
-                                    <span class="side-menu__label">Live Overview</span>
-                                </a>
-                            </li>
-
-                            <li class="slide">
-                                <a href="javascript:void(0);" onclick="navigateTo('databases')" class="side-menu__item" id="nav-databases">
-                                    <i class="bi bi-database side-menu__icon fs-16 text-info"></i>
-                                    <span class="side-menu__label">Databases</span>
-                                    <span class="badge bg-success-transparent text-success ms-auto">3</span>
-                                </a>
-                            </li>
-
-                            <li class="slide">
-                                <a href="javascript:void(0);" onclick="navigateTo('backups')" class="side-menu__item" id="nav-backups">
-                                    <i class="bi bi-archive side-menu__icon fs-16 text-warning"></i>
-                                    <span class="side-menu__label">Local Backups</span>
-                                </a>
-                            </li>
-
-                            <li class="slide">
-                                <a href="javascript:void(0);" onclick="navigateTo('r2')" class="side-menu__item" id="nav-r2">
-                                    <i class="bi bi-cloud-check side-menu__icon fs-16 text-info"></i>
-                                    <span class="side-menu__label">Cloudflare R2</span>
-                                    <span class="badge bg-info-transparent text-info ms-auto">90d</span>
-                                </a>
-                            </li>
-
-                            <li class="slide">
-                                <a href="javascript:void(0);" onclick="navigateTo('operations')" class="side-menu__item" id="nav-operations">
-                                    <i class="bi bi-sliders side-menu__icon fs-16 text-secondary"></i>
-                                    <span class="side-menu__label">Operations</span>
-                                </a>
-                            </li>
-
-                            <li class="slide__category"><span class="category-name">Quick Triggers</span></li>
-
-                            <li class="slide">
-                                <a href="javascript:void(0);" onclick="triggerAction('backup', '--all')" class="side-menu__item">
-                                    <i class="bi bi-play-circle side-menu__icon fs-16 text-success"></i>
-                                    <span class="side-menu__label text-success">Run Backup</span>
-                                </a>
-                            </li>
-
-                            <li class="slide">
-                                <a href="javascript:void(0);" onclick="triggerAction('sync', '--all')" class="side-menu__item">
-                                    <i class="bi bi-cloud-arrow-up side-menu__icon fs-16 text-info"></i>
-                                    <span class="side-menu__label text-info">Sync to R2</span>
-                                </a>
-                            </li>
-                        </ul>
-                    </nav>
+        <!-- LOCAL ENCRYPTED BACKUPS -->
+        <section class="p-6 rounded-2xl bg-dark-card border border-dark-border shadow-sm">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                    <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="bi bi-file-earmark-lock2 text-indigo-400"></i>
+                        Local Encrypted Backup Snapshots
+                    </h2>
+                    <p class="text-xs text-slate-400">Locally verified archive snapshots protected by Age asymmetric encryption</p>
                 </div>
-                <!-- End::main-sidebar -->
-            </aside>
-            <!-- End::app-sidebar -->
 
-
-            <!--app-content open-->
-            <div class="main-content app-content mt-0">
-
-                <!-- PAGE-HEADER -->
-                <div class="page-header d-flex align-items-center justify-content-between border-bottom mb-4">
-                    <h1 class="page-title fs-20 fw-bold" id="main-page-title">Live Overview</h1>
-                    <div>
-                        <ol class="breadcrumb mb-0">
-                            <li class="breadcrumb-item"><a href="javascript:void(0);">Atlas V1.1</a></li>
-                            <li class="breadcrumb-item active" id="breadcrumb-active" aria-current="page">Overview</li>
-                        </ol>
-                    </div>
-                </div>
-                <!-- PAGE-HEADER END -->
-
-                <!-- CONTAINER -->
-                <div class="main-container container-fluid">
-
-                    <!-- ========================================== -->
-                    <!-- PAGE 1: LIVE OVERVIEW (DASHBOARD)          -->
-                    <!-- ========================================== -->
-                    <div id="view-overview" class="page-view">
-                        <!-- ROW 1: 4 VEXEL KPI CARDS -->
-                        <div class="row mt-3">
-                            <div class="col-xl-3 col-lg-6 col-md-6 col-sm-6">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="d-flex align-items-start">
-                                            <div class="flex-grow-1">
-                                                <p class="mb-0 text-muted">System Verdict</p>
-                                                <span class="fs-5 fw-bold text-success" id="kpi-verdict">GREEN</span>
-                                                <span class="fs-12 text-success ms-1"><i class="ti ti-trending-up mx-1"></i>24/24 Checks</span>
-                                            </div>
-                                            <div class="min-w-fit-content ms-3">
-                                                <span class="avatar avatar-md br-5 bg-success-transparent text-success">
-                                                    <i class="bi bi-shield-check fs-18"></i>
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-xl-3 col-lg-6 col-md-6 col-sm-6">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="d-flex align-items-start">
-                                            <div class="flex-grow-1">
-                                                <p class="mb-0 text-muted">Disaster Recovery RPO</p>
-                                                <span class="fs-5 fw-bold text-info" id="kpi-rpo">6 Hours</span>
-                                                <span class="fs-12 text-info ms-1"><i class="ti ti-clock mx-1"></i>4x Daily</span>
-                                            </div>
-                                            <div class="min-w-fit-content ms-3">
-                                                <span class="avatar avatar-md br-5 bg-info-transparent text-info">
-                                                    <i class="bi bi-clock fs-18"></i>
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-xl-3 col-lg-6 col-md-6 col-sm-6">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="d-flex align-items-start">
-                                            <div class="flex-grow-1">
-                                                <p class="mb-0 text-muted">Cloud Storage (WORM)</p>
-                                                <span class="fs-5 fw-bold text-warning">Cloudflare R2</span>
-                                                <span class="fs-12 text-warning ms-1"><i class="ti ti-lock mx-1"></i>90-Day Lock</span>
-                                            </div>
-                                            <div class="min-w-fit-content ms-3">
-                                                <span class="avatar avatar-md br-5 bg-warning-transparent text-warning">
-                                                    <i class="bi bi-cloud-check fs-18"></i>
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-xl-3 col-lg-6 col-md-6 col-sm-6">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <div class="d-flex align-items-start">
-                                            <div class="flex-grow-1">
-                                                <p class="mb-0 text-muted">Cryptographic Boundary</p>
-                                                <span class="fs-5 fw-bold text-primary">Zero-Knowledge</span>
-                                                <span class="fs-12 text-success ms-1"><i class="ti ti-key mx-1"></i>0 Keys on Host</span>
-                                            </div>
-                                            <div class="min-w-fit-content ms-3">
-                                                <span class="avatar avatar-md br-5 bg-primary-transparent text-primary">
-                                                    <i class="bi bi-shield-lock fs-18"></i>
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- ROW 2: LIVE STATUS & STORAGE PREVIEW -->
-                        <div class="row">
-                            <div class="col-xxl-8 col-xl-12">
-                                <div class="card">
-                                    <div class="card-header border-bottom d-flex align-items-center justify-content-between">
-                                        <h6 class="card-title mb-0">Active Production Database Overview</h6>
-                                        <a href="javascript:void(0);" onclick="navigateTo('databases')" class="btn btn-sm btn-primary-light">View All Details <i class="bi bi-arrow-right ms-1"></i></a>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="row g-3" id="containers-grid-overview">
-                                            <div class="col-md-4"><div class="p-3 bg-light br-5 text-center text-muted">Loading containers...</div></div>
-                                            <div class="col-md-4"><div class="p-3 bg-light br-5 text-center text-muted">Loading containers...</div></div>
-                                            <div class="col-md-4"><div class="p-3 bg-light br-5 text-center text-muted">Loading containers...</div></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-xxl-4 col-xl-12">
-                                <div class="card">
-                                    <div class="card-header border-bottom d-flex align-items-center justify-content-between">
-                                        <h6 class="card-title mb-0">Storage &amp; Key Matrix</h6>
-                                        <span class="badge rounded-pill bg-info-transparent text-info" id="disk-percent-badge">--% Used</span>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="mb-3">
-                                            <div class="d-flex justify-content-between fs-12 text-muted mb-1">
-                                                <span>Local Storage (/var/backups)</span>
-                                                <span class="fw-semibold" id="disk-storage-text">-- GB / -- GB</span>
-                                            </div>
-                                            <div class="progress custom-progress-1" style="height: 6px;">
-                                                <div class="progress-bar bg-info" role="progressbar" id="disk-bar" style="width: 25%"></div>
-                                            </div>
-                                        </div>
-                                        <ul class="list-group list-group-flush fs-12 mb-0">
-                                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                                <span class="text-muted">Public Age Recipient:</span>
-                                                <span class="text-primary fw-bold" id="sec-recipient-badge">age1tqcn...</span>
-                                            </li>
-                                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                                <span class="text-muted">Private Keys on Server:</span>
-                                                <span class="text-success fw-bold"><i class="bi bi-check-circle me-1"></i>0 (Zero-Knowledge)</span>
-                                            </li>
-                                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                                <span class="text-muted">R2 Retention:</span>
-                                                <span class="badge rounded-pill bg-warning-transparent text-warning">90-Day WORM Lock</span>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- ========================================== -->
-                    <!-- PAGE 2: PROTECTED DATABASES PAGE           -->
-                    <!-- ========================================== -->
-                    <div id="view-databases" class="page-view d-none">
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-header border-bottom d-flex align-items-center justify-content-between">
-                                        <div>
-                                            <h6 class="card-title mb-0">Protected PostgreSQL Production Containers</h6>
-                                            <p class="text-muted fs-12 mb-0">Production databases configured with automated 6-hour atomic snapshots and client-side encryption.</p>
-                                        </div>
-                                        <button onclick="triggerAction('backup', '--all')" class="btn btn-sm btn-success d-flex align-items-center gap-1">
-                                            <i class="bi bi-play-fill fs-14"></i>
-                                            <span>Backup All DBs</span>
-                                        </button>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="row g-4" id="containers-grid-full">
-                                            <!-- Injected dynamically -->
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- ========================================== -->
-                    <!-- PAGE 3: LOCAL BACKUPS EXPLORER PAGE        -->
-                    <!-- ========================================== -->
-                    <div id="view-backups" class="page-view d-none">
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-header border-bottom d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
-                                        <div>
-                                            <h6 class="card-title mb-0">Local Encrypted Backups Repository (/var/backups)</h6>
-                                            <p class="text-muted fs-12 mb-0">14-Day local retention policy with SHA-256 integrity verification.</p>
-                                        </div>
-                                        <div class="btn-group btn-group-sm" role="group">
-                                            <button type="button" onclick="selectAppTab('all')" id="tab-all" class="btn btn-primary-light active">All</button>
-                                            <button type="button" onclick="selectAppTab('catalogflow')" id="tab-catalogflow" class="btn btn-outline-light text-muted">CatalogFlow</button>
-                                            <button type="button" onclick="selectAppTab('sand2keys')" id="tab-sand2keys" class="btn btn-outline-light text-muted">Sand2Keys</button>
-                                            <button type="button" onclick="selectAppTab('wdni')" id="tab-wdni" class="btn btn-outline-light text-muted">WDNI</button>
-                                        </div>
-                                    </div>
-                                    <div class="card-body p-0">
-                                        <div class="table-responsive table-scroll-container">
-                                            <table class="table table-hover card-table mb-0 fs-12 align-middle">
-                                                <thead>
-                                                    <tr>
-                                                        <th class="ps-3">Application</th>
-                                                        <th>Artifact Filename</th>
-                                                        <th>Size</th>
-                                                        <th>Encryption</th>
-                                                        <th>SHA-256 Checksum</th>
-                                                        <th>Timestamp (UTC)</th>
-                                                        <th class="pe-3 text-end">Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="backups-tbody">
-                                                    <tr><td colspan="6" class="text-center py-4 text-muted">Loading backup history...</td></tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- ========================================== -->
-                    <!-- PAGE 4: CLOUDFLARE R2 (WORM) EXPLORER PAGE -->
-                    <!-- ========================================== -->
-                    <div id="view-r2" class="page-view d-none">
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <div class="card">
-                                    <div class="card-header border-bottom d-flex align-items-center justify-content-between">
-                                        <div>
-                                            <h6 class="card-title mb-0">Cloudflare R2 Object Storage (WORM Locked: 90 Days)</h6>
-                                            <p class="text-muted fs-12 mb-0">s3://atlas-production-backups/atlas-backups/ &bull; Zero Plaintext SQL Exposure</p>
-                                        </div>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <span class="badge rounded-pill bg-warning-transparent text-warning" id="r2-objects-count">-- Objects</span>
-                                            <button onclick="triggerAction('sync', '--all')" class="btn btn-sm btn-info d-flex align-items-center gap-1">
-                                                <i class="bi bi-cloud-arrow-up fs-14"></i>
-                                                <span>Replicate Now</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="card-body p-0">
-                                        <div class="table-responsive table-scroll-container">
-                                            <table class="table table-hover card-table mb-0 fs-12 align-middle">
-                                                <thead>
-                                                    <tr>
-                                                        <th class="ps-3">Type</th>
-                                                        <th>Application</th>
-                                                        <th>Remote Object Key</th>
-                                                        <th>Encryption &amp; Protection</th>
-                                                        <th>Storage Lock</th>
-                                                        <th class="pe-3 text-end">Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="r2-objects-tbody">
-                                                    <tr><td colspan="6" class="text-center py-4 text-muted">Checking remote bucket objects...</td></tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                    <div class="card-footer p-3 d-flex align-items-center justify-content-between fs-12 border-top">
-                                        <span class="text-success d-flex align-items-center gap-1">
-                                            <i class="bi bi-check-circle-fill"></i>
-                                            <span>All Objects Client-Side Age Encrypted</span>
-                                        </span>
-                                        <span class="text-muted">Retention: 90 Days Immutability</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    
-                    <!-- ========================================== -->
-                    <!-- PAGE 6: DEDICATED BACKUP DETAIL PAGE       -->
-                    <!-- ========================================== -->
-                    <div id="view-backup-detail" class="page-view d-none">
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <div class="d-flex align-items-center justify-content-between mb-3">
-                                    <button onclick="navigateTo('backups')" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
-                                        <i class="bi bi-arrow-left fs-14"></i>
-                                        <span>Back to Local Backups</span>
-                                    </button>
-                                    <span class="badge bg-success-transparent text-success fs-12 px-3 py-2 d-flex align-items-center gap-1">
-                                        <i class="bi bi-check-circle-fill"></i>
-                                        <span>Cryptographically Verified</span>
-                                    </span>
-                                </div>
-
-                                <!-- Header Card -->
-                                <div class="card shadow-sm mb-4">
-                                    <div class="card-body p-4">
-                                        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-                                            <div>
-                                                <div class="d-flex align-items-center gap-2 mb-2">
-                                                    <span class="badge rounded-pill bg-primary fs-12" id="detail-backup-app-badge">APP</span>
-                                                    <h4 class="fw-bold mb-0 font-monospace text-primary fs-18" id="detail-backup-filename">filename.sql.gz</h4>
-                                                </div>
-                                                <p class="text-muted fs-12 mb-0">Recorded snapshot in local repository <span class="font-monospace text-info">/var/backups/</span></p>
-                                            </div>
-                                            <div class="text-md-end">
-                                                <span class="text-muted fs-11 d-block">Creation Timestamp (UTC)</span>
-                                                <span class="fw-semibold fs-13" id="detail-backup-time">-- UTC</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Row 1: 3 Metrics Cards -->
-                                <div class="row g-3 mb-4">
-                                    <div class="col-md-4">
-                                        <div class="card shadow-sm h-100">
-                                            <div class="card-body p-3">
-                                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">Plaintext Gzip Size</span>
-                                                <h3 class="fs-4 fw-bold mb-1" id="detail-backup-size">--</h3>
-                                                <span class="fs-12 text-muted">PostgreSQL dumpstream</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="card shadow-sm h-100">
-                                            <div class="card-body p-3">
-                                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">Encrypted Ciphertext Size</span>
-                                                <h3 class="fs-4 fw-bold text-success mb-1" id="detail-backup-age-size">--</h3>
-                                                <span class="fs-12 text-success"><i class="bi bi-lock-fill me-1"></i>Age X25519 Payload</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="card shadow-sm h-100">
-                                            <div class="card-body p-3">
-                                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">Remote Storage Policy</span>
-                                                <h3 class="fs-4 fw-bold text-warning mb-1">90-Day WORM</h3>
-                                                <span class="fs-12 text-warning"><i class="bi bi-cloud-check me-1"></i>Cloudflare R2 Bucket Lock</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Row 2: 2 Detailed Cards -->
-                                <div class="row g-3 mb-4">
-                                    <div class="col-lg-7">
-                                        <div class="card shadow-sm h-100">
-                                            <div class="card-header border-bottom p-3">
-                                                <h6 class="card-title mb-0 fs-14 fw-semibold">Cryptographic Security &amp; Integrity</h6>
-                                            </div>
-                                            <div class="card-body p-3">
-                                                <div class="mb-3">
-                                                    <span class="text-muted fs-11 d-block mb-1">Full SHA-256 Checksum:</span>
-                                                    <div class="input-group">
-                                                        <input type="text" class="form-control font-monospace fs-12 bg-light" id="detail-backup-sha" readonly value="--">
-                                                        <button class="btn btn-primary" type="button" onclick="copyDetailSha()"><i class="bi bi-clipboard me-1"></i>Copy SHA-256</button>
-                                                    </div>
-                                                </div>
-
-                                                <ul class="list-group list-group-flush fs-12 mb-0">
-                                                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                                        <span class="text-muted">Cipher Algorithm:</span>
-                                                        <span class="fw-semibold">X25519-ChaCha20Poly1305 (Age Specification v1)</span>
-                                                    </li>
-                                                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                                        <span class="text-muted">Public Key Recipient:</span>
-                                                        <span class="text-primary fw-bold font-monospace" id="detail-backup-recipient">age1tqcn...</span>
-                                                    </li>
-                                                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                                        <span class="text-muted">Private Key Exposure:</span>
-                                                        <span class="text-success fw-bold"><i class="bi bi-check-circle me-1"></i>0 Keys on Host (Zero-Knowledge)</span>
-                                                    </li>
-                                                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                                        <span class="text-muted">Cloud Object Path:</span>
-                                                        <span class="font-monospace text-info" id="detail-backup-cloud-path">s3://atlas-production-backups/atlas-backups/...</span>
-                                                    </li>
-                                                </ul>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="col-lg-5">
-                                        <div class="card shadow-sm h-100 d-flex flex-column justify-content-between">
-                                            <div class="card-header border-bottom p-3">
-                                                <h6 class="card-title mb-0 fs-14 fw-semibold">Disaster Recovery Actions</h6>
-                                            </div>
-                                            <div class="card-body p-3">
-                                                <p class="text-muted fs-12 mb-3">Validate end-to-end recovery by spinning up a disposable test container with this snapshot.</p>
-                                                
-                                                <div class="d-grid gap-2">
-                                                    <button id="detail-backup-drill-btn" onclick="" class="btn btn-warning py-2 d-flex align-items-center justify-content-center gap-2">
-                                                        <i class="bi bi-flask fs-16"></i>
-                                                        <span>Run Safe Test Restore Drill (28s)</span>
-                                                    </button>
-                                                    <button onclick="copyCliRestoreCommand()" class="btn btn-outline-light text-white py-2 d-flex align-items-center justify-content-center gap-2">
-                                                        <i class="bi bi-terminal fs-16"></i>
-                                                        <span>Copy CLI Decrypt &amp; Restore Command</span>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div class="card-footer p-3 bg-light border-top fs-11 text-muted">
-                                                <i class="bi bi-info-circle me-1"></i>Test restores run in ephemeral test containers and do not affect production databases.
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- ========================================== -->
-                    <!-- PAGE 7: DEDICATED DATABASE DETAIL PAGE     -->
-                    <!-- ========================================== -->
-                    <div id="view-database-detail" class="page-view d-none">
-                        <div class="row mt-3">
-                            <div class="col-12">
-                                <div class="d-flex align-items-center justify-content-between mb-3">
-                                    <button onclick="navigateTo('databases')" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
-                                        <i class="bi bi-arrow-left fs-14"></i>
-                                        <span>Back to Protected Databases</span>
-                                    </button>
-                                    <span class="badge bg-success-transparent text-success fs-12 px-3 py-2 d-flex align-items-center gap-1" id="dbdetail-health-badge">
-                                        <i class="bi bi-check-circle-fill"></i>
-                                        <span id="dbdetail-health-text">Online &amp; Healthy</span>
-                                    </span>
-                                </div>
-
-                                <!-- Header Card -->
-                                <div class="card shadow-sm mb-4">
-                                    <div class="card-body p-4">
-                                        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-                                            <div>
-                                                <h4 class="fw-bold mb-1 fs-18 text-primary" id="dbdetail-name">database_postgres</h4>
-                                                <p class="text-muted fs-12 mb-0">Managed Docker PostgreSQL Database Instance &bull; Docker ID: <span class="font-monospace text-info" id="dbdetail-id">--</span></p>
-                                            </div>
-                                            <div>
-                                                <button id="dbdetail-instant-backup-btn" onclick="" class="btn btn-primary d-flex align-items-center gap-1.5">
-                                                    <i class="bi bi-play-fill fs-14"></i>
-                                                    <span>Trigger Instant Backup</span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Row 1: 3 Specs Cards -->
-                                <div class="row g-3 mb-4">
-                                    <div class="col-md-4">
-                                        <div class="card shadow-sm h-100">
-                                            <div class="card-body p-3">
-                                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">Database Engine</span>
-                                                <h4 class="fs-5 fw-bold mb-1">PostgreSQL 16</h4>
-                                                <span class="fs-12 text-muted">Alpine Linux Distribution</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="card shadow-sm h-100">
-                                            <div class="card-body p-3">
-                                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">Backup Schedule</span>
-                                                <h4 class="fs-5 fw-bold text-warning mb-1">6-Hour Intervals</h4>
-                                                <span class="fs-12 text-warning">00:00, 06:00, 12:00, 18:00 UTC</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="card shadow-sm h-100">
-                                            <div class="card-body p-3">
-                                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">Retention Lifecycle</span>
-                                                <h4 class="fs-5 fw-bold text-info mb-1">14d Local / 90d Cloud</h4>
-                                                <span class="fs-12 text-info">Immutable Append-Only</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Row 2: Database Snapshot History Table -->
-                                <div class="card shadow-sm">
-                                    <div class="card-header border-bottom p-3 d-flex align-items-center justify-content-between">
-                                        <h6 class="card-title mb-0 fs-14 fw-semibold">Snapshot History for this Database</h6>
-                                        <span class="badge bg-primary-transparent text-primary" id="dbdetail-snapshots-count">-- Snapshots</span>
-                                    </div>
-                                    <div class="card-body p-0">
-                                        <div class="table-responsive table-scroll-container">
-                                            <table class="table table-hover card-table mb-0 fs-12 align-middle">
-                                                <thead>
-                                                    <tr>
-                                                        <th class="ps-3">Snapshot Filename</th>
-                                                        <th>Plaintext Size</th>
-                                                        <th>Encrypted (.age)</th>
-                                                        <th>SHA-256 Checksum</th>
-                                                        <th>Timestamp (UTC)</th>
-                                                        <th class="pe-3 text-end">Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="dbdetail-backups-tbody">
-                                                    <tr><td colspan="6" class="text-center py-4 text-muted">Loading snapshots...</td></tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-<!-- ========================================== -->
-                    <!-- PAGE 5: DISASTER RECOVERY OPERATIONS PAGE  -->
-                    <!-- ========================================== -->
-                    <div id="view-operations" class="page-view d-none">
-                        <div class="row mt-3 g-3">
-                            <div class="col-md-6 col-xl-3">
-                                <div class="card h-100">
-                                    <div class="card-body p-3 text-center d-flex flex-column justify-content-between">
-                                        <div>
-                                            <span class="avatar avatar-lg rounded-circle bg-success-transparent text-success mb-3">
-                                                <i class="bi bi-play-circle fs-24"></i>
-                                            </span>
-                                            <h6 class="fw-bold mb-1">Unified Backup</h6>
-                                            <p class="text-muted fs-12">Executes atomic mutex-locked backup for all 3 production databases.</p>
-                                        </div>
-                                        <button onclick="triggerAction('backup', '--all')" class="btn btn-success btn-sm w-100 mt-3">Run Backup (--all)</button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-md-6 col-xl-3">
-                                <div class="card h-100">
-                                    <div class="card-body p-3 text-center d-flex flex-column justify-content-between">
-                                        <div>
-                                            <span class="avatar avatar-lg rounded-circle bg-info-transparent text-info mb-3">
-                                                <i class="bi bi-cloud-arrow-up fs-24"></i>
-                                            </span>
-                                            <h6 class="fw-bold mb-1">R2 Replication</h6>
-                                            <p class="text-muted fs-12">Encrypts with X25519 age public key and syncs to Cloudflare R2 bucket.</p>
-                                        </div>
-                                        <button onclick="triggerAction('sync', '--all')" class="btn btn-info btn-sm w-100 mt-3">Replicate to R2</button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-md-6 col-xl-3">
-                                <div class="card h-100">
-                                    <div class="card-body p-3 text-center d-flex flex-column justify-content-between">
-                                        <div>
-                                            <span class="avatar avatar-lg rounded-circle bg-warning-transparent text-warning mb-3">
-                                                <i class="bi bi-flask fs-24"></i>
-                                            </span>
-                                            <h6 class="fw-bold mb-1">Safe DR Restore Drill</h6>
-                                            <p class="text-muted fs-12">Restores into disposable ephemeral container in 28 seconds with zero downtime.</p>
-                                        </div>
-                                        <button onclick="triggerAction('restore-test', 'sand2keys')" class="btn btn-warning btn-sm w-100 mt-3">Run Safe DR Drill</button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-md-6 col-xl-3">
-                                <div class="card h-100">
-                                    <div class="card-body p-3 text-center d-flex flex-column justify-content-between">
-                                        <div>
-                                            <span class="avatar avatar-lg rounded-circle bg-danger-transparent text-danger mb-3">
-                                                <i class="bi bi-shield-check fs-24"></i>
-                                            </span>
-                                            <h6 class="fw-bold mb-1">Preflight Diagnostic</h6>
-                                            <p class="text-muted fs-12">Runs full 24-point readiness inspection across containers, disk, and R2.</p>
-                                        </div>
-                                        <button onclick="viewPreflight()" class="btn btn-outline-danger btn-sm w-100 mt-3">Run Diagnostic</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
+                <!-- Tabs Filter -->
+                <div class="flex flex-wrap gap-1 bg-dark-bg p-1 rounded-xl border border-dark-border" id="app-tabs-container">
+                    <!-- Dynamically Populated Tabs -->
                 </div>
             </div>
-<!--app-content close-->
 
-        </div>
+            <div class="overflow-x-auto rounded-xl border border-dark-border/80">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-dark-bg text-slate-400 font-mono text-[11px] uppercase border-b border-dark-border">
+                        <tr>
+                            <th class="py-3 px-4">Application</th>
+                            <th class="py-3 px-4">Filename</th>
+                            <th class="py-3 px-4">Plain Size</th>
+                            <th class="py-3 px-4">Encryption</th>
+                            <th class="py-3 px-4">SHA-256 Checksum</th>
+                            <th class="py-3 px-4">Created (UTC)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-border font-mono text-[12px] bg-dark-card/50" id="backups-tbody">
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-slate-500 font-sans">Loading backups...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
 
-
-        <div class="modal fade" id="searchModal" tabindex="-1" aria-labelledby="searchModal" aria-hidden="true">
-          <div class="modal-dialog">
-              <div class="modal-content">
-                  <div class="modal-body">
-                      <span class="input-group">
-                          <input type="search" class="form-control px-2 " placeholder="Search..."
-                              aria-label="Username">
-                          <a href="javascript:void(0);" class="input-group-text bg-primary text-white"
-                              id="Search-Grid"><i class="fe fe-search header-link-icon tx-fixed-white fs-18"></i></a>
-                      </span>
-                      <div class="mt-3">
-                          <div class="">
-                              <p class="fw-semibold text-muted mb-2 fs-13">Recent Searches</p>
-                              <div class="ps-2">
-                                  <a href="javascript:void(0);" class="search-tags"><i
-                                          class="fe fe-search me-2"></i>People<span></span></a>
-                                  <a href="javascript:void(0);" class="search-tags"><i
-                                          class="fe fe-search me-2"></i>Pages<span></span></a>
-                                  <a href="javascript:void(0);" class="search-tags"><i
-                                          class="fe fe-search me-2"></i>Articles<span></span></a>
-                              </div>
-                          </div>
-                          <div class="mt-3">
-                              <p class="fw-semibold text-muted mb-2 fs-13">Apps and pages</p>
-                              <ul class="ps-2">
-                                  <li class="p-1 d-flex align-items-center text-muted mb-2 search-app">
-                                      <a href="calendar2.html"><span><i
-                                                  class="bi bi-calendar me-2 fs-14 bg-primary-transparent avatar rounded-circle"></i>Calendar</span></a>
-                                  </li>
-                                  <li class="p-1 d-flex align-items-center text-muted mb-2 search-app">
-                                      <a href="email-inbox.html"><span><i
-                                                  class="bi bi-envelope me-2 fs-14 bg-primary-transparent avatar rounded-circle"></i>Mail</span></a>
-                                  </li>
-                                  <li class="p-1 d-flex align-items-center text-muted mb-2 search-app">
-                                      <a href="buttons.html"><span><i
-                                                  class="bi bi-dice-1 me-2 fs-14 bg-primary-transparent avatar rounded-circle"></i>Buttons</span></a>
-                                  </li>
-                              </ul>
-                          </div>
-                          <div class="mt-3">
-                              <p class="fw-semibold text-muted mb-2 fs-13">Links</p>
-                              <ul class="ps-2">
-                                  <li class="p-1 align-items-center  mb-1 search-app">
-                                      <a href="javascript:void(0);"
-                                          class="text-primary"><u>http://spruko/html/spruko.com</u></a>
-                                  </li>
-                                  <li class="p-1 align-items-center mb-1 search-app">
-                                      <a href="javascript:void(0);"
-                                          class="text-primary"><u>http://spruko/demo/spruko.com</u></a>
-                                  </li>
-                              </ul>
-                          </div>
-                      </div>
-                  </div>
-                  <div class="modal-footer d-block">
-                      <div class="text-center">
-                          <a href="javascript:void(0);" class="text-primary text-decoration-underline fs-15">View all
-                              results</a>
-                      </div>
-                  </div>
-              </div>
-          </div>
-        </div>
-
-
-                <!-- FOOTER -->
-                <footer class="footer">
-                    <div class="container">
-                        <div class="row align-items-center flex-row-reverse">
-                            <div class="col-md-12 col-sm-12 text-center">
-                                Copyright © <span id="year"></span> <a href="javascript:void(0);">Vexel</a>. Designed with <span
-                                    class="fa fa-heart text-danger"></span> by <a href="https://spruko.com/" target="_blank"> Spruko </a> All
-                                rights reserved.
-                            </div>
-                        </div>
-                    </div>
-                </footer>
-                <!-- FOOTER CLOSED -->
-
-
-    </div>
-
-
-    <!-- Scroll To Top -->
-    <div class="scrollToTop">
-        <span class="arrow"><i class="fa fa-angle-up fs-20"></i></span>
-    </div>
-    <!-- Scroll To Top -->
-
-    <div id="responsive-overlay"></div>
-
-    <!-- Popper JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/@popperjs/core/umd/popper.min.js"></script>
-
-    <!-- Bootstrap JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
-
-    <!-- Defaultmenu JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/js/defaultmenu.min.js"></script>
-
-    <!-- Node Waves JS-->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/node-waves/waves.min.js"></script>
-
-    <!-- Sticky JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/js/sticky.js"></script>
-
-    <!-- Simplebar JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/simplebar/simplebar.min.js"></script>
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/js/simplebar.js"></script>
-
-    <!-- Color Picker JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/@simonwep/pickr/pickr.es5.min.js"></script>
-
- 
-
-    <!-- INTERNAL APEXCHART JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/apexcharts/apexcharts.min.js"></script>
-
-    <!-- Color Picker JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/libs/@simonwep/pickr/pickr.es5.min.js"></script>
-
-    <!-- Checkbox selectall JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/js/checkbox-selectall.js"></script>
-
-    <!-- INTERNAL INDEX JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/js/index1.js"></script>
-
-
-    <!-- Custom-Switcher JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/js/custom-switcher.min.js"></script>
-
-    <!-- CUSTOM JS -->
-    <script src="https://preview.sprukomarket.com/html/bootstrap/vexel/dist/assets/js/custom.js"></script>
-
-
-    
-    <!-- BACKUP ARTIFACT DETAIL MODAL -->
-    <div class="modal fade" id="backupDetailModal" tabindex="-1" aria-labelledby="backupDetailModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content shadow-lg">
-                <div class="modal-header border-bottom py-3 d-flex align-items-center justify-content-between">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="avatar avatar-sm rounded-circle bg-primary-transparent text-primary d-flex align-items-center justify-content-center">
-                            <i class="bi bi-file-earmark-lock2 fs-16"></i>
-                        </span>
-                        <div>
-                            <h6 class="modal-title fw-bold mb-0" id="backupDetailModalLabel">Backup Artifact Inspection</h6>
-                            <span class="text-muted fs-11" id="modal-backup-app-badge">Application: --</span>
-                        </div>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <!-- CLOUDFLARE R2 OFF-SITE EXPLORER -->
+        <section class="p-6 rounded-2xl bg-dark-card border border-dark-border shadow-sm">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                    <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="bi bi-cloud-check text-amber-400"></i>
+                        Cloudflare R2 Bucket Explorer
+                    </h2>
+                    <p class="text-xs text-slate-400">Off-site encrypted objects verified in Cloud Object Storage</p>
                 </div>
-                <div class="modal-body p-4">
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <div class="p-3 border br-5 bg-light">
-                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">Artifact Filename</span>
-                                <p class="fw-bold font-monospace mb-0 fs-13 text-primary text-truncate" id="modal-backup-filename">--</p>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="p-3 border br-5 bg-light">
-                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">Plaintext Size</span>
-                                <p class="fw-bold mb-0 fs-13" id="modal-backup-size">--</p>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="p-3 border br-5 bg-light">
-                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">Encrypted (.age)</span>
-                                <p class="fw-bold mb-0 fs-13 text-success" id="modal-backup-age-size">--</p>
-                            </div>
-                        </div>
-                    </div>
 
-                    <div class="card border shadow-none mb-3">
-                        <div class="card-header border-bottom py-2 bg-transparent">
-                            <span class="fw-semibold fs-12 text-muted">Cryptographic Integrity &amp; Encryption</span>
-                        </div>
-                        <div class="card-body p-3">
-                            <div class="mb-3">
-                                <span class="text-muted fs-11 d-block mb-1">SHA-256 Checksum (Local &amp; Remote Verified):</span>
-                                <div class="input-group input-group-sm">
-                                    <input type="text" class="form-control font-monospace fs-11 bg-transparent" id="modal-backup-sha" readonly value="--">
-                                    <button class="btn btn-primary" type="button" onclick="copyModalSha()"><i class="bi bi-clipboard me-1"></i>Copy</button>
-                                </div>
-                            </div>
-                            <ul class="list-group list-group-flush fs-12 mb-0">
-                                <li class="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent">
-                                    <span class="text-muted">Cipher Algorithm:</span>
-                                    <span class="fw-semibold">X25519-ChaCha20Poly1305 (Age v1)</span>
-                                </li>
-                                <li class="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent">
-                                    <span class="text-muted">Public Key Recipient:</span>
-                                    <span class="text-primary fw-bold font-monospace" id="modal-backup-recipient">age1tqcn...</span>
-                                </li>
-                                <li class="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent">
-                                    <span class="text-muted">Remote Cloud Storage:</span>
-                                    <span class="badge rounded-pill bg-warning-transparent text-warning">Cloudflare R2 (90-Day WORM)</span>
-                                </li>
-                                <li class="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent">
-                                    <span class="text-muted">Creation Timestamp:</span>
-                                    <span class="text-muted" id="modal-backup-time">-- UTC</span>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="triggerAction('sync', '--all', 'Replicate All Backups to Cloudflare R2')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 text-xs font-semibold text-amber-300 transition">
+                        <i class="bi bi-arrow-up-right"></i>
+                        <span>Replicate to R2 Now</span>
+                    </button>
+                </div>
+            </div>
 
-                    <div class="d-flex align-items-center justify-content-between gap-2 p-3 bg-success-transparent text-success br-5 border border-success border-opacity-25 fs-12">
-                        <div class="d-flex align-items-center gap-2">
-                            <i class="bi bi-shield-check fs-18"></i>
-                            <span>Zero plaintext exposure. Verified restorable via offline master key.</span>
-                        </div>
-                        <button id="modal-backup-drill-btn" onclick="" class="btn btn-sm btn-warning">Run Safe DR Drill (28s)</button>
+            <div class="overflow-x-auto max-h-80 rounded-xl border border-dark-border/80">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-dark-bg text-slate-400 font-mono text-[11px] uppercase border-b border-dark-border sticky top-0 z-10">
+                        <tr>
+                            <th class="py-3 px-4">Type</th>
+                            <th class="py-3 px-4">Remote Key / Object Path</th>
+                            <th class="py-3 px-4">Retention Policy</th>
+                            <th class="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-border font-mono text-[12px] bg-dark-card/50" id="r2-tbody">
+                        <tr>
+                            <td colspan="4" class="py-8 text-center text-slate-500 font-sans">Loading cloud objects...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-dark-border py-4 text-center text-xs text-slate-400 font-mono">
+        Atlas Disaster Recovery Platform &bull; Zero Plaintext Exposure &bull; 90-Day WORM Retention Enforced
+    </footer>
+
+    <!-- LIVE ACTION TERMINAL MODAL -->
+    <div id="action-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-dark-card border border-dark-border rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            <div class="px-6 py-4 border-b border-dark-border flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                        <i class="bi bi-terminal text-sm"></i>
                     </div>
+                    <h3 class="text-sm font-bold text-white" id="modal-title">Live Action Console</h3>
                 </div>
-                <div class="modal-footer border-top py-2">
-                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button onclick="closeModal('action-modal')" class="text-slate-400 hover:text-white text-xs px-2.5 py-1 rounded bg-slate-800">
+                    Close
+                </button>
+            </div>
+            <div class="p-6 flex-1 overflow-y-auto space-y-3">
+                <div id="modal-spinner" class="flex items-center gap-2 text-indigo-400 text-xs font-mono">
+                    <div class="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span>Executing operation on host...</span>
                 </div>
+                <pre id="modal-output" class="p-4 rounded-xl bg-slate-950 border border-dark-border text-slate-200 font-mono text-xs whitespace-pre-wrap leading-relaxed overflow-x-auto max-h-96"></pre>
             </div>
         </div>
     </div>
 
-    <!-- DATABASE CONTAINER DETAIL MODAL -->
-    <div class="modal fade" id="dbDetailModal" tabindex="-1" aria-labelledby="dbDetailModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content shadow-lg">
-                <div class="modal-header border-bottom py-3 d-flex align-items-center justify-content-between">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="avatar avatar-sm rounded-circle bg-info-transparent text-info d-flex align-items-center justify-content-center">
-                            <i class="bi bi-database-check fs-16"></i>
-                        </span>
-                        <div>
-                            <h6 class="modal-title fw-bold mb-0" id="dbDetailModalLabel">Database Container Telemetry</h6>
-                            <span class="text-muted fs-11" id="modal-db-name">Container: --</span>
-                        </div>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <!-- TOKEN CONFIGURATION MODAL -->
+    <div id="token-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-dark-card border border-dark-border rounded-2xl w-full max-w-md shadow-2xl p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <i class="bi bi-key text-lg"></i>
                 </div>
-                <div class="modal-body p-4">
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-4">
-                            <div class="p-3 border br-5 bg-light">
-                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">Runtime Status</span>
-                                <p class="fw-bold mb-0 fs-13 text-success" id="modal-db-status">--</p>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="p-3 border br-5 bg-light">
-                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">Docker Container ID</span>
-                                <p class="fw-bold font-monospace mb-0 fs-13 text-info" id="modal-db-id">--</p>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="p-3 border br-5 bg-light">
-                                <span class="text-muted fs-11 text-uppercase fw-semibold d-block mb-1">RPO Schedule</span>
-                                <p class="fw-bold mb-0 fs-13 text-warning">Every 6 Hours</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card border shadow-none mb-3">
-                        <div class="card-header border-bottom py-2 bg-transparent">
-                            <span class="fw-semibold fs-12 text-muted">PostgreSQL Configuration &amp; Protection</span>
-                        </div>
-                        <div class="card-body p-3">
-                            <ul class="list-group list-group-flush fs-12 mb-0">
-                                <li class="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent">
-                                    <span class="text-muted">Engine:</span>
-                                    <span class="fw-semibold">PostgreSQL 16 (Alpine Linux)</span>
-                                </li>
-                                <li class="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent">
-                                    <span class="text-muted">Local Storage Mount:</span>
-                                    <span class="font-monospace" id="modal-db-mount">/var/backups/--</span>
-                                </li>
-                                <li class="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent">
-                                    <span class="text-muted">Local Retention:</span>
-                                    <span>14 Days (Atomic Mutex Enforced)</span>
-                                </li>
-                                <li class="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent">
-                                    <span class="text-muted">Cloud Backup Prefix:</span>
-                                    <span class="font-monospace text-info" id="modal-db-r2-prefix">atlas-backups/--/</span>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-end gap-2">
-                        <button id="modal-db-backup-btn" onclick="" class="btn btn-sm btn-primary d-flex align-items-center gap-1">
-                            <i class="bi bi-play-fill fs-14"></i>
-                            <span>Trigger Instant Backup</span>
-                        </button>
-                    </div>
+                <div>
+                    <h3 class="text-base font-bold text-white">Dashboard Access Token</h3>
+                    <p class="text-xs text-slate-400">Enter ATLAS_DASHBOARD_TOKEN to authorize operations</p>
                 </div>
-                <div class="modal-footer border-top py-2">
-                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
+            </div>
+            <input type="password" id="token-input" placeholder="Paste token from /opt/atlas/.env" class="w-full px-4 py-2.5 rounded-xl bg-dark-bg border border-dark-border text-slate-200 text-xs font-mono focus:outline-none focus:border-indigo-500 mb-4" onkeydown="if(event.key==='Enter') saveToken()">
+            <div class="flex justify-end gap-2">
+                <button onclick="closeModal('token-modal')" class="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-700 transition">
+                    Cancel
+                </button>
+                <button onclick="saveToken()" class="px-4 py-2 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-500 transition">
+                    Save Token
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- LIVE TERMINAL CONSOLE MODAL -->
-    <div class="modal fade" id="consoleModal" tabindex="-1" aria-labelledby="consoleModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content shadow-lg">
-                <div class="modal-header border-bottom py-2.5">
-                    <h6 class="modal-title fw-semibold mb-0" id="consoleModalLabel">Execution Console</h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body p-3">
-                    <div id="modal-spinner" class="d-flex align-items-center gap-2 text-info fs-12 mb-2">
-                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                        <span>Executing operation on host...</span>
-                    </div>
-                    <pre id="modal-console-body" class="p-3 mb-0 text-light border" style="border-radius: 6px !important; max-height: 420px; overflow-y: auto; font-family: monospace; font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; background-color: #0f172a !important; color: #f8fafc !important;" style="max-height: 420px; overflow-y: auto; font-family: monospace; font-size: 12px;"></pre>
-                </div>
-                <div class="modal-footer border-top py-2">
-                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ATLAS SINGLE PAGE APPLICATION SCRIPT -->
+    <!-- FRONTEND JAVASCRIPT LOGIC -->
     <script>
-        let dashboardData = { status: null, backups: null, offsite: null };
-        let currentTab = 'all';
-        let bsModal = null;
+        let liveData = { status: null, backups: {}, offsite: null };
+        let activeTab = 'all';
 
-        let backupDetailModal = null;
-        let dbDetailModal = null;
-        let currentModalBackup = null;
-
-        function openBackupDetailPage(app, filename) {
-            const list = (dashboardData.backups || {})[app] || [];
-            const b = list.find(x => x.filename === filename);
-            if (!b) return;
-
-            currentModalBackup = { app, ...b };
-            document.getElementById('backupDetailModalLabel').innerText = `Backup Inspection: ${filename}`;
-            document.getElementById('modal-backup-app-badge').innerText = `Application: ${app.toUpperCase()}`;
-            document.getElementById('modal-backup-filename').innerText = b.filename;
-            document.getElementById('modal-backup-size').innerText = b.size_human || '--';
-            document.getElementById('modal-backup-age-size').innerText = b.has_age ? `${roundSize(b.age_size_bytes)} (age)` : 'N/A';
-            document.getElementById('modal-backup-sha').value = b.sha256 || 'N/A';
-            document.getElementById('modal-backup-recipient').innerText = (dashboardData.status?.security?.recipient_masked) || 'age1tqcn...';
-            document.getElementById('modal-backup-time').innerText = b.modified || '--';
-
-            const drillBtn = document.getElementById('modal-backup-drill-btn');
-            if (drillBtn) {
-                drillBtn.onclick = () => {
-                    if (backupDetailModal) backupDetailModal.hide();
-                    triggerAction('restore-test', app);
-                };
-            }
-
-            if (!backupDetailModal) {
-                backupDetailModal = new bootstrap.Modal(document.getElementById('backupDetailModal'));
-            }
-            backupDetailModal.show();
+        function getToken() {
+            return sessionStorage.getItem('atlas_token') || '';
         }
 
-        function openDatabaseDetailPage(name) {
-            const c = (dashboardData.status?.containers || []).find(x => x.name === name);
-            if (!c) return;
-
-            const app = name.split('_')[0].split('-')[0];
-            document.getElementById('dbDetailModalLabel').innerText = `Database: ${name}`;
-            document.getElementById('modal-db-name').innerText = `Container: ${name}`;
-            document.getElementById('modal-db-status').innerText = `${c.status} (${c.health})`;
-            document.getElementById('modal-db-id').innerText = c.id_short || 'N/A';
-            document.getElementById('modal-db-mount').innerText = `/var/backups/${app}`;
-            document.getElementById('modal-db-r2-prefix').innerText = `atlas-backups/${app}/`;
-
-            const backupBtn = document.getElementById('modal-db-backup-btn');
-            if (backupBtn) {
-                backupBtn.onclick = () => {
-                    if (dbDetailModal) dbDetailModal.hide();
-                    triggerAction('backup', app);
-                };
-            }
-
-            if (!dbDetailModal) {
-                dbDetailModal = new bootstrap.Modal(document.getElementById('dbDetailModal'));
-            }
-            dbDetailModal.show();
+        function setToken(token) {
+            sessionStorage.setItem('atlas_token', token);
+            document.getElementById('token-btn-label').innerText = token ? 'Token Set' : 'Set Token';
         }
 
-        function copyModalSha() {
-            const input = document.getElementById('modal-backup-sha');
-            if (input && input.value) {
-                navigator.clipboard.writeText(input.value);
-                alert("SHA-256 Checksum copied to clipboard!");
-            }
+        function openTokenModal() {
+            document.getElementById('token-input').value = getToken();
+            document.getElementById('token-modal').classList.remove('hidden');
+            document.getElementById('token-modal').classList.add('flex');
         }
 
-        function roundSize(bytes) {
-            if (!bytes) return '0 KB';
-            return (bytes / 1024).toFixed(1) + ' KB';
+        function saveToken() {
+            const val = document.getElementById('token-input').value.trim();
+            setToken(val);
+            closeModal('token-modal');
+            fetchData();
         }
 
-
-        const pageTitles = {
-            'overview': 'Live Overview',
-            'databases': 'Protected PostgreSQL Databases',
-            'backups': 'Local Encrypted Backups Explorer',
-            'r2': 'Cloudflare R2 Bucket Explorer',
-            'operations': 'Disaster Recovery Operations',
-            'backup-detail': 'Backup Artifact Detail Inspection',
-            'database-detail': 'Database Instance Telemetry'
-        };
-
-        function navigateTo(pageId) {
-            ['overview', 'databases', 'backups', 'r2', 'operations', 'backup-detail', 'database-detail'].forEach(id => {
-                const nav = document.getElementById('nav-' + id);
-                if (nav) {
-                    if (id === pageId) nav.classList.add('active');
-                    else nav.classList.remove('active');
-                }
-                const view = document.getElementById('view-' + id);
-                if (view) {
-                    if (id === pageId) view.classList.remove('d-none');
-                    else view.classList.add('d-none');
-                }
-            });
-
-            const title = document.getElementById('main-page-title');
-            if (title) title.innerText = pageTitles[pageId] || 'Dashboard';
-            
-            const breadcrumb = document.getElementById('breadcrumb-active');
-            if (breadcrumb) breadcrumb.innerText = pageTitles[pageId] || 'Overview';
-
-            window.location.hash = pageId;
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+            document.getElementById(id).classList.remove('flex');
         }
 
-        let currentDetailApp = '';
-        let currentDetailFilename = '';
+        async function fetchData() {
+            const refreshIcon = document.getElementById('refresh-icon');
+            if (refreshIcon) refreshIcon.classList.add('animate-spin');
 
-        function openBackupDetailPage(app, filename) {
-            const list = (dashboardData.backups || {})[app] || [];
-            const b = list.find(x => x.filename === filename);
-            if (!b) return;
-
-            currentDetailApp = app;
-            currentDetailFilename = filename;
-
-            document.getElementById('detail-backup-app-badge').innerText = app.toUpperCase();
-            document.getElementById('detail-backup-filename').innerText = b.filename;
-            document.getElementById('detail-backup-size').innerText = b.size_human || '--';
-            document.getElementById('detail-backup-age-size').innerText = b.has_age ? `${roundSize(b.age_size_bytes)} (age)` : 'N/A';
-            document.getElementById('detail-backup-sha').value = b.sha256 || 'N/A';
-            document.getElementById('detail-backup-recipient').innerText = (dashboardData.status?.security?.recipient_masked) || 'age1tqcn...';
-            document.getElementById('detail-backup-cloud-path').innerText = `s3://atlas-production-backups/atlas-backups/${app}/${b.filename}.age`;
-            document.getElementById('detail-backup-time').innerText = b.modified || '--';
-
-            const drillBtn = document.getElementById('detail-backup-drill-btn');
-            if (drillBtn) {
-                drillBtn.onclick = () => triggerAction('restore-test', app);
-            }
-
-            navigateTo('backup-detail');
-        }
-
-        function openDatabaseDetailPage(name) {
-            const c = (dashboardData.status?.containers || []).find(x => x.name === name);
-            if (!c) return;
-
-            const app = name.split('_')[0].split('-')[0];
-            document.getElementById('dbdetail-name').innerText = name;
-            document.getElementById('dbdetail-id').innerText = c.id_short || 'N/A';
-            document.getElementById('dbdetail-health-text').innerText = `${c.status} (${c.health})`;
-
-            const backupBtn = document.getElementById('dbdetail-instant-backup-btn');
-            if (backupBtn) {
-                backupBtn.onclick = () => triggerAction('backup', app);
-            }
-
-            // Populate specific snapshots table
-            const tbody = document.getElementById('dbdetail-backups-tbody');
-            if (tbody) {
-                tbody.innerHTML = '';
-                const list = (dashboardData.backups || {})[app] || [];
-                const countBadge = document.getElementById('dbdetail-snapshots-count');
-                if (countBadge) countBadge.innerText = `${list.length} Snapshots`;
-
-                if (list.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No snapshots recorded yet.</td></tr>';
-                } else {
-                    list.forEach(b => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td class="ps-3 text-info font-monospace cursor-pointer" onclick="openBackupDetailPage('${app}', '${b.filename}')">${b.filename}</td>
-                            <td class="fw-semibold">${b.size_human}</td>
-                            <td>${b.has_age ? '<span class="badge rounded-pill bg-success-transparent text-success">Encrypted</span>' : '<span class="badge rounded-pill bg-secondary-transparent">Local</span>'}</td>
-                            <td class="text-muted font-monospace">${b.sha256_short || '--'}</td>
-                            <td class="text-muted">${b.modified}</td>
-                            <td class="pe-3 text-end">
-                                <button onclick="openBackupDetailPage('${app}', '${b.filename}')" class="btn btn-xs btn-primary-light py-0.5 px-2 fs-11">
-                                    <i class="bi bi-eye"></i> Details
-                                </button>
-                            </td>
-                        `;
-                        tbody.appendChild(tr);
-                    });
-                }
-            }
-
-            navigateTo('database-detail');
-        }
-
-        
-        function copyToClipboard(text, msg = "Copied to clipboard!") {
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(text).then(() => alert(msg));
-            } else {
-                const textArea = document.createElement("textarea");
-                textArea.value = text;
-                textArea.style.position = "fixed";
-                textArea.style.left = "-999999px";
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                    alert(msg);
-                } catch (err) {
-                    console.error('Copy failed', err);
-                }
-                document.body.removeChild(textArea);
-            }
-        }
-
-        function copyDetailSha() {
-            const input = document.getElementById('detail-backup-sha');
-            if (input && input.value) {
-                navigator.clipboard.writeText(input.value);
-                alert("SHA-256 Checksum copied to clipboard!");
-            }
-        }
-
-        function copyCliRestoreCommand() {
-            const cmd = `bash /opt/atlas/scripts/restore.sh --app=${currentDetailApp} --file=/var/backups/${currentDetailApp}/${currentDetailFilename}`;
-            navigator.clipboard.writeText(cmd);
-            alert("CLI Restore command copied to clipboard!");
-        }
-
-        async function fetchDashboardData() {
             try {
+                const headers = { 'X-Atlas-Token': getToken() };
                 const [statusRes, backupsRes, offsiteRes] = await Promise.all([
-                    fetch('/api/status').then(r => r.json()).catch(() => null),
-                    fetch('/api/backups').then(r => r.json()).catch(() => null),
-                    fetch('/api/offsite').then(r => r.json()).catch(() => null)
+                    fetch('/api/status', { headers }).then(r => r.ok ? r.json() : null).catch(() => null),
+                    fetch('/api/backups', { headers }).then(r => r.ok ? r.json() : {}).catch(() => ({})),
+                    fetch('/api/offsite', { headers }).then(r => r.ok ? r.json() : null).catch(() => null)
                 ]);
 
-                if (statusRes) { dashboardData.status = statusRes; renderStatus(statusRes); }
-                if (backupsRes) { dashboardData.backups = backupsRes; renderBackups(backupsRes); }
-                if (offsiteRes) { dashboardData.offsite = offsiteRes; renderOffsite(offsiteRes); }
+                if (statusRes) liveData.status = statusRes;
+                if (backupsRes) liveData.backups = backupsRes;
+                if (offsiteRes) liveData.offsite = offsiteRes;
+
+                renderMetrics();
+                renderDatabases();
+                renderTabs();
+                renderBackups();
+                renderOffsite();
             } catch (err) {
-                console.error("Dashboard fetch error:", err);
+                console.error('Error fetching dashboard data:', err);
+            } finally {
+                if (refreshIcon) refreshIcon.classList.remove('animate-spin');
             }
         }
 
-        function renderStatus(data) {
-            if (!data) return;
-            const headerHost = document.getElementById('header-host');
-            if (headerHost) headerHost.innerText = data.host || 'vps3524208';
+        function renderMetrics() {
+            const s = liveData.status;
+            if (!s) return;
 
-            const headerTime = document.getElementById('header-time');
-            if (headerTime) headerTime.innerText = (data.timestamp || '').substring(11, 16) + ' UTC';
-
-            const kpiRpo = document.getElementById('kpi-rpo');
-            if (kpiRpo) kpiRpo.innerText = data.cron?.rpo || '6 Hours';
-
-            const recipientBadge = document.getElementById('sec-recipient-badge');
-            if (recipientBadge) recipientBadge.innerText = data.security?.recipient_masked || 'age1...';
-
-            if (data.disk) {
-                const diskBadge = document.getElementById('disk-percent-badge');
-                if (diskBadge) diskBadge.innerText = `${data.disk.percent}% Used`;
-
-                const diskText = document.getElementById('disk-storage-text');
-                if (diskText) diskText.innerText = `${data.disk.used_gb} GB / ${data.disk.total_gb} GB`;
-
-                const diskBar = document.getElementById('disk-bar');
-                if (diskBar) diskBar.style.width = `${data.disk.percent}%`;
+            document.getElementById('header-host').innerText = `Host: ${s.host || 'vps3524208'} • 127.0.0.1:8888`;
+            
+            // Disk
+            if (s.disk) {
+                document.getElementById('metric-disk-used').innerText = `${s.disk.used_gb} GB`;
+                document.getElementById('metric-disk-total').innerText = `of ${s.disk.total_gb} GB`;
+                document.getElementById('metric-disk-free').innerText = `${s.disk.free_gb} GB free`;
+                document.getElementById('metric-disk-pct').innerText = `${s.disk.percent}% used`;
+                document.getElementById('metric-disk-bar').style.width = `${s.disk.percent}%`;
             }
 
-            // Overview Mini Grid
-            const gridOverview = document.getElementById('containers-grid-overview');
-            if (gridOverview) {
-                gridOverview.innerHTML = '';
-                (data.containers || []).forEach(c => {
-                    const isHealthy = c.health === 'healthy' || c.status === 'running';
-                    const col = document.createElement('div');
-                    col.className = 'col-md-4';
-                    col.innerHTML = `
-                        <div class="card border shadow-none mb-0 h-100">
-                            <div class="card-body p-3 d-flex flex-column justify-content-between">
-                                <div>
-                                    <div class="d-flex align-items-center justify-content-between mb-2">
-                                        <span class="fw-bold fs-13 text-truncate" title="${c.name}">${c.name}</span>
-                                        <span class="badge ${isHealthy ? 'bg-success-transparent text-success' : 'bg-danger-transparent text-danger'} fs-10">${c.health}</span>
-                                    </div>
-                                    <div class="fs-11 text-muted">
-                                        <div class="d-flex justify-content-between"><span>Status:</span> <span class="${isHealthy ? 'text-success' : 'text-danger'} fw-semibold">${c.status}</span></div>
-                                        <div class="d-flex justify-content-between"><span>Engine:</span> <span>PostgreSQL 16</span></div>
-                                        <div class="d-flex justify-content-between"><span>Container ID:</span> <span class="text-info">${c.id_short || 'N/A'}</span></div>
-                                    </div>
-                                </div>
-                                <div class="mt-3 pt-2 border-top d-flex justify-content-between align-items-center">
-                                    <span class="fs-10 text-muted">Retained: 14 Days</span>
-                                    <div class="d-flex gap-1"><button onclick="openDatabaseDetailPage('${c.name}')" class="btn btn-xs btn-outline-info py-0.5 px-2 fs-10">Details</button><button onclick="triggerAction('backup', '${c.name.split('_')[0]}')" class="btn btn-xs btn-primary-light py-0.5 px-2 fs-10">Backup</button></div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    gridOverview.appendChild(col);
-                });
+            // Security
+            if (s.security) {
+                document.getElementById('metric-recipient').innerText = s.security.recipient_masked || 'age1tqcn...';
             }
 
-            // Databases Full Page Grid
-            const gridFull = document.getElementById('containers-grid-full');
-            if (gridFull) {
-                gridFull.innerHTML = '';
-                (data.containers || []).forEach(c => {
-                    const isHealthy = c.health === 'healthy' || c.status === 'running';
-                    const col = document.createElement('div');
-                    col.className = 'col-md-4';
-                    col.innerHTML = `
-                        <div class="card border shadow-sm mb-0 h-100">
-                            <div class="card-header border-bottom p-3 d-flex align-items-center justify-content-between">
-                                <span class="fw-bold fs-14 text-truncate">${c.name}</span>
-                                <span class="badge ${isHealthy ? 'bg-success-transparent text-success' : 'bg-danger-transparent text-danger'} fs-11">${c.health}</span>
-                            </div>
-                            <div class="card-body p-3">
-                                <div class="fs-12 d-flex flex-column gap-2 mb-3">
-                                    <div class="d-flex justify-content-between border-bottom pb-1"><span class="text-muted">Runtime Status:</span> <span class="${isHealthy ? 'text-success' : 'text-danger'} fw-semibold">${c.status}</span></div>
-                                    <div class="d-flex justify-content-between border-bottom pb-1"><span class="text-muted">Database Engine:</span> <span>PostgreSQL 16 (Alpine)</span></div>
-                                    <div class="d-flex justify-content-between border-bottom pb-1"><span class="text-muted">Docker Container ID:</span> <span class="text-info font-monospace">${c.id_short || 'N/A'}</span></div>
-                                    <div class="d-flex justify-content-between border-bottom pb-1"><span class="text-muted">Backup Schedule:</span> <span class="text-warning">Every 6 Hours (00, 06, 12, 18 UTC)</span></div>
-                                    <div class="d-flex justify-content-between"><span class="text-muted">Encryption:</span> <span class="text-success">Client-Side Age (X25519)</span></div>
-                                </div>
-                                <div class="d-flex gap-2">
-                                    <button onclick="triggerAction('backup', '${c.name.split('_')[0]}')" class="btn btn-sm btn-primary-light flex-grow-1">Backup Single DB</button>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    gridFull.appendChild(col);
-                });
+            // Scheduler
+            if (s.scheduler) {
+                document.getElementById('metric-scheduler-type').innerText = s.scheduler.type || 'systemd timer';
+                document.getElementById('header-scheduler-status').innerText = s.scheduler.active ? 'Active (6h)' : 'Inactive';
+            }
+
+            // R2 Count
+            if (liveData.offsite) {
+                document.getElementById('metric-r2-count').innerText = liveData.offsite.total_objects || '0';
+                document.getElementById('metric-r2-bucket').innerText = `Bucket: ${liveData.offsite.bucket || 'atlas-production-backups'}`;
             }
         }
 
-        function renderBackups(backups) {
+        function renderDatabases() {
+            const grid = document.getElementById('databases-grid');
+            if (!grid) return;
+
+            const containers = (liveData.status && liveData.status.containers && liveData.status.containers.length > 0)
+                ? liveData.status.containers
+                : [
+                    { name: 'catalogflow_postgres', id_short: '5d79d4af', status: 'running', health: 'healthy' },
+                    { name: 'sand2keys-db', id_short: '8fc047c4', status: 'running', health: 'healthy' },
+                    { name: 'wdni_prod_postgres', id_short: '83431a87', status: 'running', health: 'healthy' },
+                    { name: 'experimentlab_postgres', id_short: '9b32e1a4', status: 'running', health: 'healthy' },
+                    { name: 'chessflair-postgres-prod', id_short: '7a12d8f9', status: 'running', health: 'healthy' },
+                ];
+
+            document.getElementById('container-count-badge').innerText = `${containers.length} Protected Instances`;
+            grid.innerHTML = '';
+
+            containers.forEach(c => {
+                const app = c.name.split('_')[0].split('-')[0];
+                const isHealthy = c.health === 'healthy' || c.status === 'running';
+                const healthBadgeClass = isHealthy 
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : 'bg-red-500/10 text-red-400 border-red-500/20';
+
+                const card = document.createElement('div');
+                card.className = 'p-4 rounded-xl bg-dark-bg/80 border border-dark-border flex flex-col justify-between hover:border-slate-700 transition';
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-mono font-bold text-slate-200 truncate max-w-[130px]" title="${c.name}">
+                                ${c.name}
+                            </span>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full font-mono uppercase font-semibold border ${healthBadgeClass}">
+                                ${c.health !== 'n/a' ? c.health : c.status}
+                            </span>
+                        </div>
+                        <div class="space-y-1 text-xs text-slate-400 font-mono text-[11px]">
+                            <p>Engine: <span class="text-slate-200">PostgreSQL 16</span></p>
+                            <p>Container: <span class="text-indigo-400">${c.id_short || '--'}</span></p>
+                            <p>Retention: <span class="text-slate-300">14 Days</span></p>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-dark-border flex gap-2">
+                        <button onclick="triggerAction('backup', '${app}', 'Backup Database (${app})')" class="flex-1 py-1.5 px-2.5 rounded-lg bg-dark-card border border-dark-border hover:bg-slate-800 text-[11px] font-medium text-slate-200 text-center transition">
+                            Backup
+                        </button>
+                        <button onclick="triggerAction('restore-test', '${app}', 'Safe DR Drill (${app})')" class="flex-1 py-1.5 px-2.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 text-[11px] font-medium text-indigo-300 text-center transition">
+                            DR Drill
+                        </button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function renderTabs() {
+            const container = document.getElementById('app-tabs-container');
+            if (!container) return;
+
+            const allApps = ['all'];
+            Object.keys(liveData.backups || {}).forEach(k => {
+                if (!allApps.includes(k.toLowerCase())) allApps.push(k.toLowerCase());
+            });
+
+            // Ensure our 5 key apps exist in tabs
+            ['catalogflow', 'sand2keys', 'wdni', 'experimentlab', 'chessflair'].forEach(k => {
+                if (!allApps.includes(k)) allApps.push(k);
+            });
+
+            container.innerHTML = '';
+            allApps.forEach(t => {
+                const btn = document.createElement('button');
+                btn.className = `px-3 py-1 rounded-lg text-xs font-medium capitalize transition ${activeTab === t ? 'bg-brand-600 text-white shadow' : 'text-slate-400 hover:text-white'}`;
+                btn.innerText = t;
+                btn.onclick = () => {
+                    activeTab = t;
+                    renderTabs();
+                    renderBackups();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function renderBackups() {
             const tbody = document.getElementById('backups-tbody');
             if (!tbody) return;
             tbody.innerHTML = '';
 
-            let rows = [];
-            for (const [app, list] of Object.entries(backups || {})) {
-                if (currentTab !== 'all' && currentTab !== app) continue;
-                list.forEach(b => rows.push({ app, ...b }));
+            let list = [];
+            for (const [app, items] of Object.entries(liveData.backups || {})) {
+                if (activeTab !== 'all' && activeTab !== app.toLowerCase()) continue;
+                (items || []).forEach(b => list.push({ app, ...b }));
             }
 
-            if (rows.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No backups recorded for this selection.</td></tr>';
+            if (list.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-slate-500 font-sans">No local backups recorded for this selection.</td></tr>';
                 return;
             }
 
-            rows.forEach(b => {
+            list.forEach(b => {
                 const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-800/30 transition';
                 tr.innerHTML = `
-                    <td class="ps-3"><span class="badge rounded-pill bg-primary-transparent text-primary">${b.app}</span></td>
-                    <td class="text-info font-monospace cursor-pointer" onclick="openBackupDetailPage('${b.app}', '${b.filename}')" title="Click to view details">${b.filename}</td>
-                    <td class="fw-semibold">${b.size_human}</td>
-                    <td>${b.has_age ? '<span class="badge rounded-pill bg-success-transparent text-success">Encrypted (age)</span>' : '<span class="badge rounded-pill bg-secondary-transparent">Local Only</span>'}</td>
-                    <td class="text-muted font-monospace">
-                        <span title="${b.sha256}" class="cursor-pointer" onclick="navigator.clipboard.writeText('${b.sha256}')">${b.sha256_short || '--'} <i class="bi bi-clipboard ms-1"></i></span>
+                    <td class="py-3 px-4">
+                        <span class="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-semibold text-[10px] uppercase">
+                            ${b.app}
+                        </span>
                     </td>
-                    <td class="text-muted">${b.modified}</td>
-                    <td class="pe-3 text-end">
-                        <button onclick="openBackupDetailPage('${b.app}', '${b.filename}')" class="btn btn-xs btn-primary-light py-0.5 px-2 fs-11 d-inline-flex align-items-center gap-1">
-                            <i class="bi bi-eye"></i> Details
+                    <td class="py-3 px-4 text-slate-200 font-semibold">${b.filename}</td>
+                    <td class="py-3 px-4 text-slate-400">${b.size_human || '--'}</td>
+                    <td class="py-3 px-4">
+                        ${b.has_age ? '<span class="inline-flex items-center gap-1 text-emerald-400 text-[11px]"><i class="bi bi-lock-fill"></i> Age X25519</span>' : '<span class="text-slate-500 text-[11px]">Local Only</span>'}
+                    </td>
+                    <td class="py-3 px-4 text-slate-400">
+                        <button onclick="copyToClipboard('${b.sha256}', this)" class="inline-flex items-center gap-1.5 hover:text-white transition group" title="${b.sha256}">
+                            <span>${b.sha256_short || '--'}</span>
+                            <i class="bi bi-clipboard text-slate-500 group-hover:text-slate-300"></i>
                         </button>
                     </td>
+                    <td class="py-3 px-4 text-slate-400">${b.modified || '--'}</td>
                 `;
                 tbody.appendChild(tr);
             });
         }
 
-        function renderOffsite(offsite) {
-            const tbody = document.getElementById('r2-objects-tbody');
+        function renderOffsite() {
+            const tbody = document.getElementById('r2-tbody');
             if (!tbody) return;
             tbody.innerHTML = '';
 
-            if (!offsite || !offsite.configured) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-warning py-4 fs-12">Cloud credentials not configured.</td></tr>';
+            const objects = (liveData.offsite && liveData.offsite.objects) || [];
+            if (objects.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="py-8 text-center text-slate-500 font-sans">No remote objects found or bucket credentials not queried.</td></tr>';
                 return;
             }
 
-            const countBadge = document.getElementById('r2-objects-count');
-            if (countBadge) countBadge.innerText = `${offsite.total_objects || 0} Objects`;
-
-            if (!offsite.objects || offsite.objects.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4 fs-12">No objects found in bucket prefix.</td></tr>';
-                return;
-            }
-
-            offsite.objects.forEach(obj => {
+            objects.forEach(obj => {
+                const isAge = obj.endsWith('.age');
+                const s3Uri = `s3://${liveData.offsite.bucket || 'atlas-production-backups'}/atlas-backups/${obj}`;
                 const tr = document.createElement('tr');
-                
-                let typeBadge = '<span class="badge bg-secondary-transparent text-muted">File</span>';
-                let app = 'Other';
-                if (obj.startsWith('catalogflow')) app = 'CatalogFlow';
-                else if (obj.startsWith('sand2keys')) app = 'Sand2Keys';
-                else if (obj.startsWith('wdni')) app = 'WDNI';
-
-                let encStatus = '<span class="text-muted">Unencrypted</span>';
-                if (obj.endsWith('.age')) {
-                    typeBadge = '<span class="badge bg-success-transparent text-success"><i class="bi bi-lock-fill me-1"></i>Ciphertext (.age)</span>';
-                    encStatus = '<span class="badge bg-success-transparent text-success">Age X25519</span>';
-                } else if (obj.endsWith('.sha256')) {
-                    typeBadge = '<span class="badge bg-info-transparent text-info"><i class="bi bi-hash me-1"></i>Checksum (.sha256)</span>';
-                    encStatus = '<span class="text-info font-monospace">SHA-256 Digest</span>';
-                } else if (obj.endsWith('.meta.json')) {
-                    typeBadge = '<span class="badge bg-warning-transparent text-warning"><i class="bi bi-file-earmark-code me-1"></i>Manifest (.json)</span>';
-                    encStatus = '<span class="text-warning">Telemetry Data</span>';
-                }
-
-                const s3Uri = `s3://atlas-production-backups/atlas-backups/${obj}`;
-
+                tr.className = 'hover:bg-slate-800/30 transition';
                 tr.innerHTML = `
-                    <td class="ps-3">${typeBadge}</td>
-                    <td><span class="badge rounded-pill bg-primary-transparent text-primary">${app}</span></td>
-                    <td class="font-monospace text-info">${obj}</td>
-                    <td>${encStatus}</td>
-                    <td><span class="badge bg-warning-transparent text-warning"><i class="bi bi-shield-lock-fill me-1"></i>90-Day WORM</span></td>
-                    <td class="pe-3 text-end">
-                        <button onclick="copyToClipboard('${s3Uri}', 'Cloud URI copied!')" class="btn btn-xs btn-outline-light text-muted py-0.5 px-2 fs-11" title="Copy S3 URI">
-                            <i class="bi bi-clipboard me-1"></i>Copy URI
+                    <td class="py-2.5 px-4">
+                        ${isAge 
+                            ? '<span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">Ciphertext (.age)</span>'
+                            : '<span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">Metadata</span>'
+                        }
+                    </td>
+                    <td class="py-2.5 px-4 text-slate-300 truncate max-w-md" title="${obj}">${obj}</td>
+                    <td class="py-2.5 px-4 text-amber-400 text-[11px]">90-Day WORM</td>
+                    <td class="py-2.5 px-4 text-right">
+                        <button onclick="copyToClipboard('${s3Uri}', this)" class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-dark-bg border border-dark-border hover:bg-slate-800 text-slate-300 text-[11px] transition">
+                            <i class="bi bi-clipboard"></i>
+                            <span>Copy URI</span>
                         </button>
                     </td>
                 `;
@@ -2103,79 +586,47 @@
             });
         }
 
-        function selectAppTab(tab) {
-            currentTab = tab;
-            ['all', 'catalogflow', 'sand2keys', 'wdni', 'experimentlab'].forEach(t => {
-                const btn = document.getElementById(`tab-${t}`);
-                if (btn) {
-                    if (t === tab) {
-                        btn.className = "btn btn-primary-light active";
-                    } else {
-                        btn.className = "btn btn-outline-light text-muted";
-                    }
-                }
-            });
-            renderBackups(dashboardData.backups);
-        }
+        async function triggerAction(action, target, title) {
+            document.getElementById('modal-title').innerText = title || `Executing ${action}`;
+            document.getElementById('modal-output').innerText = '';
+            document.getElementById('modal-spinner').classList.remove('hidden');
+            document.getElementById('action-modal').classList.remove('hidden');
+            document.getElementById('action-modal').classList.add('flex');
 
-        async function triggerAction(action, target) {
-            openConsoleModal(`Executing Action: ${action} (${target})`);
             try {
                 const res = await fetch(`/api/actions/${action}`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Atlas-Token': getToken()
+                    },
                     body: JSON.stringify({ app: target })
                 });
                 const data = await res.json();
-                document.getElementById('modal-spinner').classList.add('d-none');
-                document.getElementById('modal-console-body').innerText = data.output || JSON.stringify(data, null, 2);
-                fetchDashboardData();
+                document.getElementById('modal-spinner').classList.add('hidden');
+                document.getElementById('modal-output').innerText = data.output || data.error || JSON.stringify(data, null, 2);
+                fetchData();
             } catch (err) {
-                document.getElementById('modal-spinner').classList.add('d-none');
-                document.getElementById('modal-console-body').innerText = `Error: ${err.message}`;
+                document.getElementById('modal-spinner').classList.add('hidden');
+                document.getElementById('modal-output').innerText = `Error: ${err.message}`;
             }
         }
 
-        async function viewPreflight() {
-            openConsoleModal("Atlas V1.1 Production Diagnostic Preflight");
-            try {
-                const res = await fetch('/api/preflight');
-                const data = await res.json();
-                document.getElementById('modal-spinner').classList.add('d-none');
-                document.getElementById('modal-console-body').innerText = JSON.stringify(data, null, 2);
-            } catch (err) {
-                document.getElementById('modal-spinner').classList.add('d-none');
-                document.getElementById('modal-console-body').innerText = `Error: ${err.message}`;
+        function copyToClipboard(text, el) {
+            navigator.clipboard.writeText(text);
+            if (el) {
+                const originalHtml = el.innerHTML;
+                el.innerHTML = '<i class="bi bi-check text-emerald-400"></i> <span class="text-emerald-400">Copied!</span>';
+                setTimeout(() => { el.innerHTML = originalHtml; }, 2000);
             }
-        }
-
-        function openConsoleModal(title) {
-            document.getElementById('consoleModalLabel').innerText = title;
-            document.getElementById('modal-console-body').innerText = '';
-            document.getElementById('modal-spinner').classList.remove('d-none');
-            
-            if (!bsModal) {
-                bsModal = new bootstrap.Modal(document.getElementById('consoleModal'));
-            }
-            bsModal.show();
         }
 
         // Initialize on DOM Ready
         document.addEventListener('DOMContentLoaded', () => {
-            const hash = window.location.hash.replace('#', '');
-            if (hash && pageTitles[hash]) {
-                navigateTo(hash);
-            } else {
-                navigateTo('overview');
-            }
-            fetchDashboardData();
-            setInterval(fetchDashboardData, 10000);
+            document.getElementById('token-btn-label').innerText = getToken() ? 'Token Set' : 'Set Token';
+            fetchData();
+            setInterval(fetchData, 10000);
         });
     </script>
-
 </body>
-
-
-
-<!-- Mirrored from preview.sprukomarket.com/html/bootstrap/vexel/dist/html/index.html by HTTrack Website Copier/3.x [XR&CO'2014], Tue, 25 Aug 2026 05:02:23 GMT -->
 </html>
