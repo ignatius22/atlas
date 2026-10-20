@@ -1,60 +1,38 @@
-# Atlas V1.1 Production Web Dashboard
+# Atlas Dashboard
 
-The **Atlas Web Dashboard** is a zero-dependency, real-time control center and visual explorer for Atlas production backups, zero-knowledge encryption, and Cloudflare R2 off-site replication.
+The dashboard answers one question: **could every app on this server be recovered right now?**
 
----
+Each app is shown as a chain of custody. A backup has to be dumped, checksummed, encrypted, confirmed in offsite storage and restore-tested before Atlas calls it recoverable. A broken link shows exactly where recovery is at risk.
 
-## Features
+## How it fits together
 
-* **Live Database & Container Health Cards:** Real-time metrics, status, and health checks for every database container registered in `config/apps.yml`.
-* **Local Encrypted Backups Explorer:** Filter backups by application, view size, timestamp, SHA-256 checksums (with 1-click copy), and age encryption badges.
-* **Cloudflare R2 Remote Explorer:** Real-time browser of encrypted objects in `atlas-production-backups` (`.age`, `.sha256`, `.meta.json`).
-* **Interactive Disaster Recovery Controls:**
-  * One-click manual backup trigger (`backup.sh --all`)
-  * One-click Cloudflare R2 sync trigger (`sync-offsite.sh --all`)
-  * One-click non-destructive disposable container restore drill (`restore.sh --target-env disposable-test`)
-  * One-click production preflight diagnostic viewer
-* **Security Matrix:** Verifies zero private keys on the host, displays public age recipient key, and confirms IP whitelisting.
+| Part | Path | Role |
+| --- | --- | --- |
+| API server | `dashboard/server.py` | Python standard library only. Binds to `127.0.0.1:8888`, serves the API and the built app. |
+| React app | `dashboard/web` | Vite + React + TypeScript source. |
+| Build output | `dashboard/dist` | Committed, so the VPS never needs Node.js. CI fails if it is out of date. |
 
----
+Read-only endpoints (`/api/status`, `/api/backups`, `/api/offsite`) need no token. Actions (`/api/actions/backup`, `sync`, `restore-test`) require the `X-Atlas-Token` header, which the app asks for once per browser tab.
 
-## How to Run & Access the Dashboard
-
-### 1. Launch on VPS
-
-To start the dashboard manually on the VPS:
-```bash
-/opt/atlas/bin/atlas-dashboard 8888
-```
-
-To install as a background `systemd` service:
-```bash
-cp /opt/atlas/infra/atlas-dashboard.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now atlas-dashboard
-systemctl status atlas-dashboard
-```
-
----
-
-### 2. Securely Access from Your Local Machine (SSH Port Forward)
-
-Because the dashboard binds to `127.0.0.1` (localhost) for maximum security, you can access it from your local machine over an encrypted SSH tunnel:
+## Running it on the server
 
 ```bash
-# On your local machine / laptop:
-ssh -N -L 8888:127.0.0.1:8888 root@153.75.251.207
+# ATLAS_DASHBOARD_TOKEN must be set in /opt/atlas/.env
+sudo systemctl enable --now atlas-dashboard.service
+
+# From your laptop, tunnel to the localhost-only port
+ssh -L 8888:127.0.0.1:8888 you@your-server
+# then open http://localhost:8888
 ```
 
-Then open your browser and navigate to:
-```text
-http://localhost:8888
+## Developing the UI
+
+```bash
+cd dashboard/web
+npm ci
+npm run dev          # http://localhost:5173, proxies /api to ATLAS_API_URL (default http://127.0.0.1:8888)
+npm test             # chain-of-custody logic
+npm run build        # writes dashboard/dist — commit the result
 ```
 
----
-
-## Architecture & Security
-
-* **Zero External Port Exposure:** The dashboard runs on `127.0.0.1:8888` and is not exposed to the public internet.
-* **Zero Pip / NPM Dependencies:** The backend uses pure Python 3 standard library (`http.server`, `subprocess`, `json`, `pathlib`).
-* **Zero Credential Exposure:** All tokens, secrets, and private keys are redacted from API responses and the UI.
+Point the dev server at a remote API through an SSH tunnel: `ATLAS_API_URL=http://127.0.0.1:8888 npm run dev`.
