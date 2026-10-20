@@ -35,3 +35,42 @@ jobs:
         run: |
           chmod +x bin/atlas bin/doctor scripts/*.sh tests/*.sh
           ./tests/run-all.sh
+
+  dashboard:
+    name: Dashboard (React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard/web
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: dashboard/web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # dashboard/dist is committed so the VPS serves it without Node.js.
+      # Fail if someone changed the source but forgot to rebuild.
+      - name: Check committed build is up to date
+        run: |
+          if [ -n "$(git status --porcelain -- ../dist)" ]; then
+            echo "::error::dashboard/dist is out of date. Run 'cd dashboard/web && npm run build' and commit the result."
+            git status --porcelain -- ../dist
+            exit 1
+          fi
