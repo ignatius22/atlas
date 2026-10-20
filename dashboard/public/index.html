@@ -429,18 +429,21 @@
             const grid = document.getElementById('databases-grid');
             if (!grid) return;
 
-            const containers = (liveData.status && liveData.status.containers && liveData.status.containers.length > 0)
+            // Never show placeholder data: a DR dashboard must not report fake "healthy" instances.
+            const containers = (liveData.status && Array.isArray(liveData.status.containers))
                 ? liveData.status.containers
-                : [
-                    { name: 'catalogflow_postgres', id_short: '5d79d4af', status: 'running', health: 'healthy' },
-                    { name: 'sand2keys-db', id_short: '8fc047c4', status: 'running', health: 'healthy' },
-                    { name: 'wdni_prod_postgres', id_short: '83431a87', status: 'running', health: 'healthy' },
-                    { name: 'experimentlab_postgres', id_short: '9b32e1a4', status: 'running', health: 'healthy' },
-                    { name: 'chessflair-postgres-prod', id_short: '7a12d8f9', status: 'running', health: 'healthy' },
-                ];
+                : [];
 
             document.getElementById('container-count-badge').innerText = `${containers.length} Protected Instances`;
             grid.innerHTML = '';
+
+            if (containers.length === 0) {
+                const empty = document.createElement('p');
+                empty.className = 'text-sm text-slate-400';
+                empty.innerText = 'No registered database containers found. Add apps to config/apps.yml, or check that the dashboard API is reachable.';
+                grid.appendChild(empty);
+                return;
+            }
 
             containers.forEach(c => {
                 const app = c.name.split('_')[0].split('-')[0];
@@ -487,11 +490,6 @@
             const allApps = ['all'];
             Object.keys(liveData.backups || {}).forEach(k => {
                 if (!allApps.includes(k.toLowerCase())) allApps.push(k.toLowerCase());
-            });
-
-            // Ensure our 5 key apps exist in tabs
-            ['catalogflow', 'sand2keys', 'wdni', 'experimentlab', 'chessflair'].forEach(k => {
-                if (!allApps.includes(k)) allApps.push(k);
             });
 
             container.innerHTML = '';
