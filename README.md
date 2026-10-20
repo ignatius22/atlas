@@ -200,7 +200,7 @@ Inspects CPU, memory, swap, disk capacity, Docker containers, Nginx reverse prox
 ### 3. Verify Backup in an Isolated Test Container
 ```bash
 # Spins up test_<app>_db, streams backup with ON_ERROR_STOP=1, verifies schema, cleans up
-./scripts/restore.sh --app=catalogflow --target=test
+./scripts/restore.sh --app=myapp --target=test
 ```
 
 ### 4. Enable Native Systemd 6-Hour Persistent Timer
