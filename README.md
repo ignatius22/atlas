@@ -99,7 +99,7 @@ Plain `cron` permanently skips scheduled triggers that occur while a host is pow
 Cloud APIs and network links experience transient flaps. Atlas wraps off-site synchronization in a bounded 3-attempt retry loop with exponential backoff (5s, 10s, 20s). Persistent failures exit cleanly without hanging processes or creating false durability markers.
 
 ### Why Backup and Sync Use Independent Locks
-`backup.sh` acquires `/var/run/atlas/backup.lock` (FD 200), while `sync-offsite.sh` acquires `/var/run/atlas/sync.lock` (FD 201). Because local backups write to `.tmp` files and atomically rename them upon completion, offsite uploads cannot read partial dumps. Decoupled locking ensures that slow cloud uploads never block local snapshot creation or urgent recovery drills.
+`backup.sh` holds a kernel lock on `/run/atlas/backup.lock`, `sync-offsite.sh` on `/run/atlas/sync.lock`, and `drill.sh` on `/run/atlas/drill.lock` (override the directory with `ATLAS_LOCK_DIR`). Because local backups write to `.tmp` files and atomically rename them upon completion, offsite uploads cannot read partial dumps. Decoupled locking ensures that slow cloud uploads never block local snapshot creation or urgent recovery drills.
 
 ### Why Atlas Does Not Promise Continuous Point-in-Time Recovery (PITR)
 Atlas is designed for single-node application hosting. Continuous Write-Ahead Log (WAL) streaming and PITR introduce complex distributed consensus and high operational overhead. Atlas commits to a transparent **6-Hour Scheduled Snapshot RPO** under normal operation, backed by atomic dumps, persistent timers, and verified offsite replication. Extended host or network outages can increase effective RPO.
