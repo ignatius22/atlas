@@ -94,6 +94,8 @@ assert_file_contains "${TIMER_FILE}" "Persistent=true" "Timer uses Persistent=tr
 assert_file_contains "${TIMER_FILE}" "WantedBy=timers\.target" "Timer installs under timers.target"
 assert_file_contains "${TIMER_FILE}" "OnCalendar=.*(00,06,12,18|00/6)" "Timer triggers every six hours"
 assert_file_contains "${TIMER_FILE}" "RandomizedDelaySec=" "Timer specifies a randomized start delay"
+# A timer must not Require= its service: that starts a run every time the timer is started or restarted (e.g. on each deploy).
+assert_file_not_contains "${TIMER_FILE}" "^Requires=" "Backup timer does not start a backup when the timer itself is (re)started"
 
 # ------------------------------------------------------------------------------
 # Test 6b: Daily Restore Drill Units
@@ -105,6 +107,7 @@ assert_file_contains "${DRILL_SERVICE}" "^ExecStart=/opt/atlas/scripts/drill\.sh
 assert_file_contains "${DRILL_SERVICE}" "^Type=oneshot" "Drill service is oneshot"
 assert_file_contains "${DRILL_TIMER}" "Persistent=true" "Drill timer catches up after downtime"
 assert_file_contains "${DRILL_TIMER}" "^OnCalendar=" "Drill timer has a daily schedule"
+assert_file_not_contains "${DRILL_TIMER}" "^Requires=" "Drill timer does not start a drill when the timer itself is (re)started"
 assert_file_not_contains "${DRILL_SERVICE}" "(password|secret_key|age1|bearer|token)[[:space:]]*=" "No secrets hardcoded in atlas-drill.service"
 
 # ------------------------------------------------------------------------------
