@@ -1,5 +1,7 @@
 # Atlas Commercial Strategy & Product Hypothesis
 
+> **Superseded:** the current product strategy, pricing and roadmap live in [PRODUCT-PLAN.md](PRODUCT-PLAN.md). This file is kept for history.
+
 > **Note:** This document outlines commercial hypotheses for potential future exploration. These are not commitments, but design boundaries to ensure the open-source core remains clean, unencumbered, and fully functional.
 
 ---
