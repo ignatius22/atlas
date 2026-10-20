@@ -30,7 +30,7 @@ Atlas enforces five non-negotiable safety invariants:
 
 * **Strict Durability Gate (`.synced` Authorization)**: Local retention pruning is blocked for any backup archive that lacks an atomic `.synced` marker. The `.synced` marker is written **only after** an explicit remote object existence check (`rclone lsf` or `aws s3 ls`) succeeds.
 * **Asymmetric Zero-Knowledge Encryption**: All off-site archives are encrypted on the host using `age` (X25519 public recipient keys). The private identity key is **never** stored on the VPS.
-* **Isolated Restoration Proof**: Restoration tests (`restore.sh --app <app> --target=test`) execute against isolated ephemeral Docker containers (`test_<app>_db`) in read-only mode, proving SQL stream integrity without touching production databases.
+* **Isolated Restoration Proof**: Every backup records a manifest of its tables and exact row counts, read from the dump itself. A daily restore drill (`atlas-drill.timer`) restores each app's newest backup into a throwaway container running the same Postgres image as production, then checks every table's row count against that manifest. Results are recorded next to each archive (`.drill.json`), alerted on failure, and shown in the dashboard.
 * **Kernel Advisory Concurrency Locking**: Script executions use non-blocking Linux kernel advisory locks (`flock -n`). Process crashes or abnormal terminations immediately release locks via the kernel; stale lock files cannot exist.
 * **Zero Shell Interpretation in Management APIs**: The dashboard server (`dashboard/server.py`) operates with structured argument arrays (`shell=False`), token authentication (`hmac.compare_digest`), strict regex allowlists, and localhost (`127.0.0.1`) binding.
 
@@ -198,11 +198,14 @@ Inspects CPU, memory, swap, disk capacity, Docker containers, Nginx reverse prox
 ./scripts/sync-offsite.sh --all
 ```
 
-### 3. Verify Backup in an Isolated Test Container
+### 3. Run a Restore Drill
 ```bash
-# Spins up test_<app>_db, streams backup with ON_ERROR_STOP=1, verifies schema, cleans up
-./scripts/restore.sh --app=myapp --target=test
+# Restores the newest backup into a throwaway container, verifies every table's
+# row count against the backup's manifest, records the result, cleans up
+atlas restore drill myapp      # one app
+atlas restore drill            # every app
 ```
+Drills run daily at 03:30 UTC through `atlas-drill.timer`. The installer enables it automatically when `atlas-backup.timer` is enabled; otherwise run `sudo systemctl enable --now atlas-drill.timer`.
 
 ### 4. Enable Native Systemd 6-Hour Persistent Timer
 Systemd is the recommended production scheduler for Atlas. The installer sets up the unit files automatically. To enable and verify the scheduler:
