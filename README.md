@@ -152,7 +152,8 @@ infra-prod/
 │
 ├── dashboard/
 │   ├── server.py                  # Hardened Python 3 API (hmac auth, regex allowlists)
-│   └── index.html                 # Real-time infrastructure status interface
+│   ├── web/                       # React + TypeScript source (Vite)
+│   └── dist/                      # Committed production build served by server.py
 │
 ├── bin/
 │   ├── atlas                      # Central management CLI wrapper

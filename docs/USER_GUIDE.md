@@ -226,7 +226,8 @@ apps:
 │
 ├── dashboard/
 │   ├── server.py              # Hardened zero-dependency Python 3 HTTP API
-│   └── index.html             # Real-time infrastructure status interface
+│   ├── web/                       # React + TypeScript source (Vite)
+│   └── dist/                      # Committed production build served by server.py
 │
 ├── scripts/
 │   ├── lib/
