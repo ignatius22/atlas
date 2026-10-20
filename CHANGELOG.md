@@ -7,6 +7,8 @@ All notable changes to Atlas will be documented in this file.
 - `bin/atlas` no longer passes arguments through `eval`; app names containing shell syntax (for example `$(...)`) could previously execute commands.
 
 ### Changed
+- Dashboard rebuilt from scratch in React + TypeScript (`dashboard/web`, built to `dashboard/dist`). It shows each app's chain of custody (dumped, checksummed, encrypted, offsite-confirmed, restore-tested) and a plain-language recovery verdict. The Bootstrap page and the unused Ecme template are removed.
+- `/api/backups` now reports `synced` (the `.synced` durability marker) and `modified_epoch` for each backup.
 - CLI version is read from the new `VERSION` file (previously hardcoded as 1.0.0).
 - Dashboard reads apps only from config and discovered backup directories; hardcoded app names and placeholder "healthy" containers are removed.
 - Dashboard resolves the off-site provider from `ATLAS_S3_PROVIDER` or the endpoint instead of always reporting Cloudflare R2.
