@@ -24,6 +24,7 @@ All notable changes to Atlas will be documented in this file.
 - `infra/nginx/production/`: live nginx configs for our own sites. They were never read from the repo (the server uses its own copies in `/etc/nginx`). Generic `nginx.conf`, snippets and the app template remain.
 
 ### Fixed
+- Timers no longer declare `Requires=` on their service, which made every timer start or restart (including each deploy) run an extra backup or drill immediately.
 - `atlas-backup.service` ran offsite sync only if every app's backup succeeded, so one stopped container blocked all apps from reaching offsite storage. Sync now always runs, and the service still reports failure.
 - Backup manifests detect truncated dumps (a COPY block without its terminator) and fail the backup.
 - `tests/test-systemd.sh` and `tests/test-notifications-dashboard.sh` are now executable, so `make test` passes locally.
