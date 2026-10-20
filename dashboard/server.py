@@ -104,16 +104,6 @@ def get_registered_apps():
         except Exception:
             pass
 
-    default_apps = {
-        "catalogflow": "catalogflow_postgres",
-        "sand2keys": "sand2keys-db",
-        "wdni": "wdni_prod_postgres",
-        "experimentlab": "experimentlab_postgres"
-    }
-    for k, v in default_apps.items():
-        if k not in apps:
-            apps[k] = v
-
     backup_base = Path("/var/backups")
     if backup_base.exists():
         try:
@@ -125,6 +115,80 @@ def get_registered_apps():
             pass
 
     return apps
+
+KEY_SCAN_DIRS = ["/opt/atlas", "/root", "/home", "/etc", "/var/backups"]
+KEY_SCAN_SKIP_DIRS = {".git", "tests", "docs", "node_modules", "__pycache__", "proc", "sys"}
+KEY_SCAN_SKIP_FILES = {"production-preflight", "notify.sh", "restore-offsite.sh", "server.py", "README.md"}
+KEY_SCAN_MAX_BYTES = 64 * 1024  # age identity files are tiny; skip anything larger
+KEY_SCAN_TTL_SECONDS = int(os.environ.get("ATLAS_KEY_SCAN_TTL", 600))
+_key_scan_cache = {"at": 0.0, "count": 0}
+
+def count_private_keys_on_host():
+    """
+    Count files containing an age private key (AGE-SECRET-KEY) on this host.
+    Pure Python traversal, zero shell execution. The walk is expensive, so the
+    result is cached for KEY_SCAN_TTL_SECONDS and large files are skipped.
+    """
+    now = time.time()
+    if now - _key_scan_cache["at"] < KEY_SCAN_TTL_SECONDS:
+        return _key_scan_cache["count"]
+
+    key_count = 0
+    for sdir in KEY_SCAN_DIRS:
+        if not os.path.isdir(sdir):
+            continue
+        for root, dirs, files in os.walk(sdir):
+            dirs[:] = [d for d in dirs if d not in KEY_SCAN_SKIP_DIRS]
+            for fname in files:
+                if fname in KEY_SCAN_SKIP_FILES or fname.endswith(".pyc"):
+                    continue
+                fpath = os.path.join(root, fname)
+                try:
+                    if not os.path.isfile(fpath) or os.path.getsize(fpath) > KEY_SCAN_MAX_BYTES:
+                        continue
+                    with open(fpath, "r", encoding="utf-8", errors="ignore") as f_obj:
+                        if "AGE-SECRET-KEY" in f_obj.read():
+                            key_count += 1
+                except Exception:
+                    pass
+
+    _key_scan_cache["at"] = now
+    _key_scan_cache["count"] = key_count
+    return key_count
+
+def detect_offsite_provider(env):
+    """
+    Resolve the rclone S3 provider and a human label from configuration.
+    ATLAS_S3_PROVIDER wins (same variable sync-offsite.sh uses); otherwise
+    the provider is inferred from the endpoint, defaulting to Cloudflare to
+    match sync-offsite.sh.
+    """
+    endpoint = env.get("ATLAS_S3_ENDPOINT", "").lower()
+    explicit = env.get("ATLAS_S3_PROVIDER", "").strip()
+    if explicit:
+        rclone_provider = explicit
+    elif "amazonaws.com" in endpoint:
+        rclone_provider = "AWS"
+    elif "backblazeb2.com" in endpoint:
+        rclone_provider = "Other"
+    elif "wasabisys.com" in endpoint:
+        rclone_provider = "Wasabi"
+    elif "digitaloceanspaces.com" in endpoint:
+        rclone_provider = "DigitalOcean"
+    else:
+        rclone_provider = "Cloudflare"
+
+    labels = {
+        "cloudflare": "Cloudflare R2",
+        "aws": "AWS S3",
+        "wasabi": "Wasabi",
+        "digitalocean": "DigitalOcean Spaces",
+        "minio": "MinIO",
+    }
+    label = labels.get(rclone_provider.lower())
+    if not label:
+        label = "Backblaze B2" if "backblazeb2.com" in endpoint else "S3-compatible"
+    return rclone_provider, label
 
 def get_system_summary():
     """Retrieve comprehensive system metrics and database container statuses."""
@@ -155,27 +219,7 @@ def get_system_summary():
         else:
             containers.append({"name": name, "status": "not found / stopped", "health": "down", "started": ""})
 
-    # Zero-Knowledge Key Scan (Pure Python traversal, zero shell execution)
-    key_count = 0
-    scan_dirs = ["/opt/atlas", "/root", "/home", "/etc", "/var/backups"]
-    for sdir in scan_dirs:
-        p = Path(sdir)
-        if p.exists():
-            try:
-                for root, dirs, files in os.walk(str(p)):
-                    dirs[:] = [d for d in dirs if d not in {".git", "tests", "docs", "node_modules", "__pycache__"}]
-                    for fname in files:
-                        if fname in {"production-preflight", "notify.sh", "restore-offsite.sh", "server.py", "README.md"} or fname.endswith(".pyc"):
-                            continue
-                        fpath = os.path.join(root, fname)
-                        try:
-                            with open(fpath, "r", encoding="utf-8", errors="ignore") as f_obj:
-                                if "AGE-SECRET-KEY" in f_obj.read():
-                                    key_count += 1
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+    key_count = count_private_keys_on_host()
 
     # Recipient Info
     recipient = env.get("ATLAS_AGE_RECIPIENT", "")
@@ -217,7 +261,7 @@ def get_system_summary():
             "recipient_masked": masked_recipient
         },
         "offsite": {
-            "provider": "Cloudflare R2",
+            "provider": detect_offsite_provider(env)[1],
             "bucket": bucket,
             "configured": has_r2
         },
@@ -275,7 +319,7 @@ def get_backups_list():
     return result
 
 def get_remote_objects():
-    """Query Cloudflare R2 bucket objects via rclone without shell interpolation."""
+    """Query the off-site S3-compatible bucket via rclone without shell interpolation."""
     env = load_env()
     bucket = env.get("ATLAS_S3_BUCKET", "atlas-production-backups")
     endpoint = env.get("ATLAS_S3_ENDPOINT", "")
@@ -287,7 +331,7 @@ def get_remote_objects():
 
     env_vars = os.environ.copy()
     env_vars.update({
-        "RCLONE_S3_PROVIDER": "Cloudflare",
+        "RCLONE_S3_PROVIDER": detect_offsite_provider(env)[0],
         "RCLONE_S3_ENDPOINT": endpoint,
         "RCLONE_S3_ACCESS_KEY_ID": key_id,
         "RCLONE_S3_SECRET_ACCESS_KEY": secret_key,
@@ -297,7 +341,7 @@ def get_remote_objects():
     args = ["rclone", "lsf", f":s3:{bucket}/atlas-backups/", "--recursive", "--s3-no-check-bucket"]
     code, out, err = run_cmd(args, env=env_vars, timeout=15)
     if code != 0:
-        return {"configured": True, "objects": [], "error": err.strip() or "R2 listing failed"}
+        return {"configured": True, "objects": [], "error": err.strip() or "Off-site listing failed"}
 
     lines = [line.strip() for line in out.strip().split("\n") if line.strip() and not line.endswith("/")]
     return {

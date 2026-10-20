@@ -174,15 +174,15 @@ sys.path.insert(0, str(test_dir))
 from dashboard import server
 
 # 1. Test validate_app_name allowlist
-valid_cases = ["catalogflow", "sand2keys", "wdni_prod", "app-123", "--all"]
+valid_cases = ["myapp", "shop-api", "billing_prod", "app-123", "--all"]
 for v in valid_cases:
     ok, app, err = server.validate_app_name(v, allow_all=True)
     assert ok, f"Expected '{v}' to be valid, got error: {err}"
 
 invalid_cases = [
-    "catalogflow; id",
-    "catalogflow && id",
-    "catalogflow | id",
+    "myapp; id",
+    "myapp && id",
+    "myapp | id",
     "$(id)",
     "`id`",
     "../../../etc",
@@ -250,8 +250,8 @@ if os.path.exists(pwn_file):
     os.remove(pwn_file)
 
 for payload in [
-    {"app": f"catalogflow; touch {pwn_file}"},
-    {"app": f"catalogflow && touch {pwn_file}"},
+    {"app": f"myapp; touch {pwn_file}"},
+    {"app": f"myapp && touch {pwn_file}"},
     {"app": f"`touch {pwn_file}`"},
     {"app": f"$(touch {pwn_file})"},
     {"app": "foo | bar"},
@@ -272,6 +272,76 @@ if [ $? -eq 0 ]; then
   PASSED=$((PASSED + 1))
 else
   printf "  \033[31m✗ FAIL\033[0m: Dashboard security verification failed\n"
+  FAILED=$((FAILED + 1))
+fi
+
+# ------------------------------------------------------------------------------
+# Unified CLI: arguments are never re-parsed by the shell (no eval)
+# ------------------------------------------------------------------------------
+printf "\n\033[1m=== Unified CLI Argument Safety Tests ===\033[0m\n"
+CLI_PWN_DIR="$(mktemp -d)"
+for payload in "x; touch ${CLI_PWN_DIR}/semi" 'x$(touch '"${CLI_PWN_DIR}"'/subst)' 'x`touch '"${CLI_PWN_DIR}"'/tick`' "x && touch ${CLI_PWN_DIR}/and"; do
+  "${ATLAS_ROOT}/bin/atlas" backup create "${payload}" --config="${ATLAS_ROOT}/config/apps.example.yml" >/dev/null 2>&1 || true
+  "${ATLAS_ROOT}/bin/atlas" restore test "${payload}" >/dev/null 2>&1 || true
+done
+if [ -z "$(ls -A "${CLI_PWN_DIR}")" ]; then
+  printf "  \033[32m✓ PASS\033[0m: bin/atlas passes app arguments without shell interpretation\n"
+  PASSED=$((PASSED + 1))
+else
+  printf "  \033[31m✗ FAIL\033[0m: bin/atlas executed injected shell code: %s\n" "$(ls "${CLI_PWN_DIR}")"
+  FAILED=$((FAILED + 1))
+fi
+rm -rf "${CLI_PWN_DIR}"
+
+if ! grep -qE '(^|[^[:alnum:]_])eval([^[:alnum:]_]|$)' "${ATLAS_ROOT}/bin/atlas"; then
+  printf "  \033[32m✓ PASS\033[0m: bin/atlas contains no eval\n"
+  PASSED=$((PASSED + 1))
+else
+  printf "  \033[31m✗ FAIL\033[0m: bin/atlas still uses eval\n"
+  FAILED=$((FAILED + 1))
+fi
+
+# ------------------------------------------------------------------------------
+# Dashboard: no hardcoded apps, provider from config, cached key scan
+# ------------------------------------------------------------------------------
+printf "\n\033[1m=== Dashboard Configuration Tests ===\033[0m\n"
+if (cd "${ATLAS_ROOT}" && python3 - << 'PYEOF'
+import sys, time
+sys.path.insert(0, ".")
+from dashboard import server
+
+src = open("dashboard/server.py").read()
+assert "default_apps" not in src, "hardcoded default apps still present"
+
+cases = {
+    "https://abc.r2.cloudflarestorage.com": ("Cloudflare", "Cloudflare R2"),
+    "https://s3.eu-west-2.amazonaws.com": ("AWS", "AWS S3"),
+    "https://s3.us-west-004.backblazeb2.com": ("Other", "Backblaze B2"),
+    "https://minio.internal:9000": ("Cloudflare", "Cloudflare R2"),
+}
+for endpoint, expected in cases.items():
+    got = server.detect_offsite_provider({"ATLAS_S3_ENDPOINT": endpoint})
+    assert got == expected, f"{endpoint}: expected {expected}, got {got}"
+assert server.detect_offsite_provider({"ATLAS_S3_PROVIDER": "Minio", "ATLAS_S3_ENDPOINT": "https://minio.internal"}) == ("Minio", "MinIO")
+
+calls = {"n": 0}
+real_walk = server.os.walk
+def counting_walk(*a, **k):
+    calls["n"] += 1
+    return real_walk(*a, **k)
+server.os.walk = counting_walk
+server._key_scan_cache["at"] = 0.0
+server.KEY_SCAN_DIRS = ["/nonexistent-atlas-dir", "dashboard"]
+server.count_private_keys_on_host()
+first = calls["n"]
+server.count_private_keys_on_host()
+assert first == 1 and calls["n"] == 1, f"key scan not cached (walks: {calls['n']})"
+PYEOF
+); then
+  printf "  \033[32m✓ PASS\033[0m: No hardcoded apps, provider resolved from config, key scan cached\n"
+  PASSED=$((PASSED + 1))
+else
+  printf "  \033[31m✗ FAIL\033[0m: Dashboard configuration checks failed\n"
   FAILED=$((FAILED + 1))
 fi
 
