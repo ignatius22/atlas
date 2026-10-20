@@ -2,7 +2,7 @@ name: Deploy Atlas to VPS
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ master ]
   workflow_dispatch:
 
 jobs:
@@ -31,6 +31,7 @@ jobs:
           username: ${{ secrets.VPS_USER || 'root' }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
+          envs: GITHUB_SHA
           script: |
             set -Eeuo pipefail
             echo "=== Starting Atlas VPS Deployment ==="
@@ -39,6 +40,20 @@ jobs:
             sudo chmod -R u+rwX /opt/atlas/.git || true
             git config --global --add safe.directory /opt/atlas
             cd /opt/atlas
-            git pull origin main || git pull origin master
+            # Deploy exactly the commit that triggered this run, from master only.
+            # Fast-forward only: if the server has local commits, fail loudly
+            # instead of reporting a successful no-op.
+            git fetch origin master
+            git checkout master
+            git merge --ff-only origin/master
+            echo "Deployed commit: $(git rev-parse --short HEAD)"
+            if [ "$(git rev-parse HEAD)" != "${GITHUB_SHA}" ]; then
+              echo "::warning::Server is at $(git rev-parse --short HEAD), expected ${GITHUB_SHA:0:7} (a newer push may have landed)."
+            fi
             sudo ./scripts/install.sh
+            # Pick up new dashboard code; only restarts if the service is already running.
+            if systemctl is-active --quiet atlas-dashboard; then
+              sudo systemctl restart atlas-dashboard
+              echo "Restarted atlas-dashboard"
+            fi
             echo "=== Atlas VPS Deployment Complete ==="
