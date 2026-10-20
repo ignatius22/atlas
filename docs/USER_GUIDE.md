@@ -543,7 +543,7 @@ ATLAS_NOTIFY_SUCCESS=false
 | **Decryption Key Theft via VPS Root Breach** | Asymmetric `age` encryption: VPS holds public recipient key only; private key stored in secure offline vault. |
 | **Tampered / Corrupted Backup Archives** | Mandatory SHA-256 checksum verification before any restore operation. |
 | **Production DB Overwrite during Testing** | Restore drills target isolated ephemeral test containers (`test_<app>_db`). |
-| **Concurrent Process Collisions** | Non-blocking kernel advisory locks (`flock -n`) on `/var/run/atlas/*.lock`. |
+| **Concurrent Process Collisions** | Non-blocking kernel advisory locks (`flock -n`) on `/run/atlas/*.lock`. |
 
 ---
 
@@ -564,7 +564,7 @@ ATLAS_NOTIFY_SUCCESS=false
 
 ### "My backup is not being created"
 1. Run `/opt/atlas/bin/doctor` to verify Docker and database container health.
-2. Check if another backup process is holding the lock: `lsof /var/run/atlas/backup.lock`.
+2. Check if another backup process is holding the lock: `fuser -v /run/atlas/backup.lock` (a lock is only held while a run is alive; it cannot go stale).
 3. Test dumping manually: `docker exec <container> pg_dump -U <user> <db> > /dev/null`.
 
 ### "Old local backups are not being deleted"
