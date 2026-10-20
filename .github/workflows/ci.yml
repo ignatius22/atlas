@@ -29,6 +29,11 @@ jobs:
           sudo apt-get install -y age rclone
           pip install pyyaml
 
+      - name: Prepare backup directory for end-to-end drills
+        run: |
+          sudo mkdir -p /var/backups
+          sudo chown "$(id -u):$(id -g)" /var/backups
+
       - name: Run Test Suite
         env:
           PG_VERSION: ${{ matrix.pg-version }}
