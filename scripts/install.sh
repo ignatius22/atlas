@@ -14,8 +14,9 @@ SYSTEMD_DIR="${ATLAS_SYSTEMD_DIR:-/etc/systemd/system}"
 echo "Installing Atlas V1 to ${INSTALL_DIR}..."
 
 # Validate that source unit files exist before attempting installation
-if [ ! -f "${SOURCE_ROOT}/systemd/atlas-backup.service" ] || [ ! -f "${SOURCE_ROOT}/systemd/atlas-backup.timer" ]; then
-  echo "Error: Required systemd unit files (systemd/atlas-backup.service, systemd/atlas-backup.timer) not found in ${SOURCE_ROOT}." >&2
+if [ ! -f "${SOURCE_ROOT}/systemd/atlas-backup.service" ] || [ ! -f "${SOURCE_ROOT}/systemd/atlas-backup.timer" ] \
+   || [ ! -f "${SOURCE_ROOT}/systemd/atlas-drill.service" ] || [ ! -f "${SOURCE_ROOT}/systemd/atlas-drill.timer" ]; then
+  echo "Error: Required systemd unit files (systemd/atlas-backup.*, systemd/atlas-drill.*) not found in ${SOURCE_ROOT}." >&2
   exit 1
 fi
 
@@ -45,16 +46,21 @@ if [ -d "${SYSTEMD_DIR}" ] || [ -n "${ATLAS_SYSTEMD_DIR:-}" ] || command -v syst
   if [ "${INSTALL_DIR}" != "/opt/atlas" ]; then
     sed "s|/opt/atlas|${INSTALL_DIR}|g" "${INSTALL_DIR}/systemd/atlas-backup.service" > "${SYSTEMD_DIR}/atlas-backup.service"
     sed "s|/opt/atlas|${INSTALL_DIR}|g" "${INSTALL_DIR}/infra/atlas-dashboard.service" > "${SYSTEMD_DIR}/atlas-dashboard.service"
+    sed "s|/opt/atlas|${INSTALL_DIR}|g" "${INSTALL_DIR}/systemd/atlas-drill.service" > "${SYSTEMD_DIR}/atlas-drill.service"
   else
     cp "${INSTALL_DIR}/systemd/atlas-backup.service" "${SYSTEMD_DIR}/atlas-backup.service"
     cp "${INSTALL_DIR}/infra/atlas-dashboard.service" "${SYSTEMD_DIR}/atlas-dashboard.service"
+    cp "${INSTALL_DIR}/systemd/atlas-drill.service" "${SYSTEMD_DIR}/atlas-drill.service"
   fi
   cp "${INSTALL_DIR}/systemd/atlas-backup.timer" "${SYSTEMD_DIR}/atlas-backup.timer"
+  cp "${INSTALL_DIR}/systemd/atlas-drill.timer" "${SYSTEMD_DIR}/atlas-drill.timer"
 
-  chmod 0644 "${SYSTEMD_DIR}/atlas-backup.service" "${SYSTEMD_DIR}/atlas-backup.timer" "${SYSTEMD_DIR}/atlas-dashboard.service"
+  chmod 0644 "${SYSTEMD_DIR}/atlas-backup.service" "${SYSTEMD_DIR}/atlas-backup.timer" "${SYSTEMD_DIR}/atlas-dashboard.service" \
+    "${SYSTEMD_DIR}/atlas-drill.service" "${SYSTEMD_DIR}/atlas-drill.timer"
 
   # Validate that the unit files exist in destination before claiming success
-  if [ ! -f "${SYSTEMD_DIR}/atlas-backup.service" ] || [ ! -f "${SYSTEMD_DIR}/atlas-backup.timer" ] || [ ! -f "${SYSTEMD_DIR}/atlas-dashboard.service" ]; then
+  if [ ! -f "${SYSTEMD_DIR}/atlas-backup.service" ] || [ ! -f "${SYSTEMD_DIR}/atlas-backup.timer" ] || [ ! -f "${SYSTEMD_DIR}/atlas-dashboard.service" ] \
+     || [ ! -f "${SYSTEMD_DIR}/atlas-drill.service" ] || [ ! -f "${SYSTEMD_DIR}/atlas-drill.timer" ]; then
     echo "Error: Failed to install systemd unit files into ${SYSTEMD_DIR}." >&2
     exit 1
   fi
@@ -63,12 +69,21 @@ if [ -d "${SYSTEMD_DIR}" ] || [ -n "${ATLAS_SYSTEMD_DIR:-}" ] || command -v syst
   if command -v systemctl >/dev/null 2>&1; then
     echo "Reloading systemd daemon (systemctl daemon-reload)..."
     systemctl daemon-reload || true
+
+    # Scheduled backups are only half the promise: when they are enabled,
+    # enable the daily restore drill too. Opt out with ATLAS_SKIP_DRILL_TIMER=1.
+    if [ -z "${ATLAS_SYSTEMD_DIR:-}" ] && [ "${ATLAS_SKIP_DRILL_TIMER:-0}" != "1" ] \
+       && systemctl is-enabled --quiet atlas-backup.timer 2>/dev/null; then
+      if systemctl enable --now atlas-drill.timer >/dev/null 2>&1; then
+        echo "Daily restore drill enabled (atlas-drill.timer, 03:30 UTC)."
+      fi
+    fi
   fi
 
   echo "Systemd unit files installed successfully."
   echo ""
   echo "To enable and start the automated 6-hour persistent backup scheduler, run:"
-  echo "  sudo systemctl enable --now atlas-backup.timer"
+  echo "  sudo systemctl enable --now atlas-backup.timer atlas-drill.timer"
   echo ""
   echo "To enable the internal web dashboard (binds to 127.0.0.1:8888), configure"
   echo "ATLAS_DASHBOARD_TOKEN in ${INSTALL_DIR}/.env and run:"
@@ -77,7 +92,8 @@ if [ -d "${SYSTEMD_DIR}" ] || [ -n "${ATLAS_SYSTEMD_DIR:-}" ] || command -v syst
 fi
 
 # Validate that unit files exist in INSTALL_DIR
-if [ ! -f "${INSTALL_DIR}/systemd/atlas-backup.service" ] || [ ! -f "${INSTALL_DIR}/systemd/atlas-backup.timer" ] || [ ! -f "${INSTALL_DIR}/infra/atlas-dashboard.service" ]; then
+if [ ! -f "${INSTALL_DIR}/systemd/atlas-backup.service" ] || [ ! -f "${INSTALL_DIR}/systemd/atlas-backup.timer" ] || [ ! -f "${INSTALL_DIR}/infra/atlas-dashboard.service" ] \
+   || [ ! -f "${INSTALL_DIR}/systemd/atlas-drill.service" ] || [ ! -f "${INSTALL_DIR}/systemd/atlas-drill.timer" ]; then
   echo "Error: Installation verification failed: unit files missing in ${INSTALL_DIR}." >&2
   exit 1
 fi

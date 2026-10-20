@@ -32,7 +32,7 @@ export function TokenDialog({ open, error, onSubmit, onCancel }: Props) {
       >
         <h2 id="token-title">Unlock actions</h2>
         <p>
-          Backups, uploads and test restores need the dashboard token. It is the{" "}
+          Backups, uploads and restore drills need the dashboard token. It is the{" "}
           <code>ATLAS_DASHBOARD_TOKEN</code> value in your server's <code>.env</code> and is kept only
           until you close this tab.
         </p>

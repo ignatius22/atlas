@@ -24,11 +24,13 @@ export default function App() {
   const chains = useMemo(() => {
     const backups = data.backups ?? {};
     // Worst first, so the app that needs attention is at the top.
-    const rank = { unprotected: 0, "no-backups": 1, "at-risk": 2, recoverable: 3 } as const;
+    const rank = { unprotected: 0, "drill-failed": 1, "no-backups": 2, "at-risk": 3, recoverable: 4 } as const;
     return Object.keys(backups)
-      .map((app) => buildChain(app, backups[app], drills[app], now))
+      .map((app) =>
+        buildChain(app, backups[app], drills[app], now, { drillsScheduled: data.status?.scheduler.drills_active }),
+      )
       .sort((a, b) => rank[a.health] - rank[b.health] || a.app.localeCompare(b.app));
-  }, [data.backups, drills, now]);
+  }, [data.backups, data.status, drills, now]);
 
   const run = useCallback(
     async (action: ActionName, app: string) => {
@@ -183,6 +185,12 @@ function Facts({ status }: { status: SystemStatus }) {
       <div>
         <dt>Backups run</dt>
         <dd className={status.scheduler.active ? "" : "tone-bad"}>{schedule}</dd>
+      </div>
+      <div>
+        <dt>Restore drills</dt>
+        <dd className={status.scheduler.drills_active ? "" : "tone-bad"}>
+          {status.scheduler.drills_active ? "Daily at 03:30 UTC" : "Not scheduled"}
+        </dd>
       </div>
       <div>
         <dt>Offsite storage</dt>

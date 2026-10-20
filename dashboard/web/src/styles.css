@@ -282,6 +282,7 @@ button.link {
   color: var(--warn);
 }
 .health-unprotected .health-tag,
+.health-drill-failed .health-tag,
 .health-no-backups .health-tag {
   color: var(--bad);
 }
