@@ -123,6 +123,7 @@ infra-prod/
 │
 ├── docs/
 │   ├── USER_GUIDE.md              # 📖 Comprehensive User Manual & Operations Guide
+│   ├── PRODUCT-PLAN.md            # Product strategy, positioning, pricing & roadmap
 │   ├── ARCHITECTURE.md            # Deep system architecture & durability design
 │   ├── RUNBOOK.md                 # Incident response & emergency playbooks
 │   └── DISASTER_RECOVERY.md       # Cold-start server reconstruction guide
