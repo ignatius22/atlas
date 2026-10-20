@@ -11,11 +11,35 @@ export interface ChainLink {
   detail: string;
 }
 
-export type AppHealth = "recoverable" | "at-risk" | "unprotected" | "no-backups";
+export type AppHealth = "recoverable" | "at-risk" | "drill-failed" | "unprotected" | "no-backups";
 
 export interface DrillResult {
   passed: boolean;
   at: number; // epoch ms
+  reason?: string;
+  tables?: number;
+  rows?: number;
+}
+
+// A daily drill plus a day of slack before the last proof counts as stale.
+export const DRILL_STALE_HOURS = 48;
+
+export interface ChainOptions {
+  drillsScheduled?: boolean;
+}
+
+// The newest recorded drill across an app's backups.
+export function latestRecordedDrill(backups: Backup[]): DrillResult | undefined {
+  let best: DrillResult | undefined;
+  for (const b of backups) {
+    const d = b.drill;
+    if (!d || !d.checked_at) continue;
+    const at = d.checked_at * 1000;
+    if (!best || at > best.at) {
+      best = { passed: d.passed, at, reason: d.reason || undefined, tables: d.tables_verified, rows: d.rows_found };
+    }
+  }
+  return best;
 }
 
 export interface AppChain {
@@ -51,9 +75,19 @@ export function ago(ms: number, now: number): string {
 export function buildChain(
   app: string,
   backups: Backup[],
-  drill: DrillResult | undefined,
+  sessionDrill: DrillResult | undefined,
   now: number,
+  options: ChainOptions = {},
 ): AppChain {
+  // Prefer whichever proof is newest: the recorded drill or one run from this page.
+  const recorded = latestRecordedDrill(backups);
+  // A drill run from the page is also recorded by the server moments earlier,
+  // so treat a recorded result within five minutes as the same run.
+  const drill =
+    !recorded ? sessionDrill
+    : !sessionDrill ? recorded
+    : sessionDrill.at - recorded.at > 5 * 60 * 1000 ? sessionDrill
+    : recorded;
   const sorted = [...backups].sort((a, b) => backupTime(b) - backupTime(a));
   const newest = sorted[0];
   const newestSynced = sorted.find((b) => b.synced);
@@ -68,7 +102,7 @@ export function buildChain(
         { key: "checksum", label: "Checksummed", state: "unknown", detail: "Waiting for a backup" },
         { key: "encrypted", label: "Encrypted", state: "unknown", detail: "Waiting for a backup" },
         { key: "offsite", label: "Offsite", state: "unknown", detail: "Waiting for a backup" },
-        drillLink(drill, now),
+        drillLink(drill, now, options),
       ],
     };
   }
@@ -83,7 +117,9 @@ export function buildChain(
       state: late ? "warn" : "ok",
       detail: late
         ? `Last backup ${ago(backupTime(newest), now)}, later than the 6-hour schedule`
-        : `${ago(backupTime(newest), now)}, ${newest.size_human}`,
+        : [ago(backupTime(newest), now), newest.size_human, newest.contents ? `${newest.contents.tables} tables` : ""]
+            .filter(Boolean)
+            .join(", "),
     },
     {
       key: "checksum",
@@ -98,15 +134,17 @@ export function buildChain(
       detail: newest.has_age ? "Sealed with your age public key" : "Not encrypted yet; it is encrypted during offsite sync",
     },
     offsiteLink(newest, newestSynced, now),
-    drillLink(drill, now),
+    drillLink(drill, now, options),
   ];
 
   let health: AppHealth;
   let summary: string;
   if (drill && !drill.passed && newestSynced) {
     // A copy that failed to restore is not a recovery plan, however fresh it is.
-    health = "at-risk";
-    summary = "The last test restore failed. Check its output below before relying on these backups.";
+    health = "drill-failed";
+    summary = drill.reason
+      ? `The last restore drill failed. ${drill.reason}.`
+      : "The last restore drill failed. Check its output before relying on these backups.";
   } else if (newest.synced && !late) {
     health = "recoverable";
     summary = `Recoverable from an offsite copy made ${ago(backupTime(newest), now)}.`;
@@ -138,13 +176,30 @@ function offsiteLink(newest: Backup, newestSynced: Backup | undefined, now: numb
   return { key: "offsite", label: "Offsite", state: "broken", detail: "No copy confirmed in remote storage" };
 }
 
-function drillLink(drill: DrillResult | undefined, now: number): ChainLink {
+function drillLink(drill: DrillResult | undefined, now: number, options: ChainOptions): ChainLink {
+  const label = "Restore tested";
   if (!drill) {
-    return { key: "drill", label: "Restore tested", state: "unknown", detail: "Not tested this session" };
+    return {
+      key: "drill",
+      label,
+      state: "unknown",
+      detail: options.drillsScheduled ? "Not tested yet; the daily drill runs at 03:30 UTC" : "Never tested; daily drills are off",
+    };
   }
-  return drill.passed
-    ? { key: "drill", label: "Restore tested", state: "ok", detail: `Test restore passed ${ago(drill.at, now)}` }
-    : { key: "drill", label: "Restore tested", state: "broken", detail: `Test restore failed ${ago(drill.at, now)}` };
+  if (!drill.passed) {
+    return { key: "drill", label, state: "broken", detail: `Drill failed ${ago(drill.at, now)}` };
+  }
+  const proof =
+    drill.tables !== undefined && drill.rows !== undefined
+      ? `${drill.tables} tables, ${drill.rows.toLocaleString("en-US")} rows verified`
+      : "Restore verified";
+  const stale = now - drill.at > DRILL_STALE_HOURS * 3600 * 1000;
+  return {
+    key: "drill",
+    label,
+    state: stale ? "warn" : "ok",
+    detail: stale ? `Last verified ${ago(drill.at, now)}` : `${proof} ${ago(drill.at, now)}`,
+  };
 }
 
 export function verdict(chains: AppChain[]): { tone: "good" | "warn" | "bad" | "empty"; text: string } {
@@ -170,7 +225,18 @@ export function verdict(chains: AppChain[]): { tone: "good" | "warn" | "bad" | "
       text: `${unprotected} of ${total} ${noun} would lose data if this server disappeared.`,
     };
   }
-  const atRisk = total - recoverable;
+  const drillFailed = chains.filter((c) => c.health === "drill-failed").length;
+  if (drillFailed > 0) {
+    return {
+      tone: "bad",
+      text: drillFailed === total
+        ? total === 1
+          ? "Your app's last restore drill failed. Its backups are not proven to work."
+          : `All ${total} apps failed their last restore drill.`
+        : `${drillFailed} of ${total} ${noun} failed ${drillFailed === 1 ? "its" : "their"} last restore drill.`,
+    };
+  }
+  const atRisk = total - recoverable; // all remaining apps are "at-risk" here
   return {
     tone: "warn",
     text: atRisk === 1

@@ -243,6 +243,9 @@ def get_system_summary():
     _, cron_out, _ = run_cmd(["crontab", "-l"], timeout=5)
     has_cron = ("0 */6" in cron_out or "0 0,6,12,18" in cron_out) and "backup.sh --all" in cron_out
 
+    drill_code, drill_out, _ = run_cmd(["systemctl", "is-active", "atlas-drill.timer"], timeout=5)
+    drill_timer_active = drill_code == 0 and drill_out.strip() == "active"
+
     scheduler_type = "systemd" if has_systemd_timer else ("cron" if has_cron else "none")
     scheduler_active = has_systemd_timer or has_cron
 
@@ -271,7 +274,8 @@ def get_system_summary():
         "scheduler": {
             "type": scheduler_type,
             "active": scheduler_active,
-            "rpo": "6 Hours" if scheduler_active else "Unscheduled"
+            "rpo": "6 Hours" if scheduler_active else "Unscheduled",
+            "drills_active": drill_timer_active,
         },
         "cron": {
             "active": scheduler_active,
@@ -292,6 +296,8 @@ def get_backups_list():
                 sha_file = Path(f"{f}.sha256")
                 age_file = Path(f"{f}.age")
                 synced_file = Path(f"{f}.synced")
+                manifest_file = Path(f"{f}.manifest.json")
+                drill_file = Path(f"{f}.drill.json")
                 meta_file = Path(f"{f}.meta.json")
 
                 sha = ""
@@ -300,6 +306,31 @@ def get_backups_list():
                         sha = sha_file.read_text().split()[0]
                     except Exception:
                         pass
+
+                contents = None
+                if manifest_file.exists():
+                    try:
+                        m = json.loads(manifest_file.read_text())
+                        contents = {"tables": m.get("table_count"), "rows": m.get("total_rows")}
+                    except Exception:
+                        contents = None
+
+                drill = None
+                if drill_file.exists():
+                    try:
+                        d = json.loads(drill_file.read_text())
+                        drill = {
+                            "passed": bool(d.get("passed")),
+                            "checked_at": d.get("checked_at"),
+                            "duration_s": d.get("duration_s"),
+                            "reason": d.get("reason") or "",
+                            "tables_verified": d.get("tables_verified"),
+                            "tables_expected": d.get("tables_expected"),
+                            "rows_found": d.get("rows_found"),
+                            "image": d.get("image"),
+                        }
+                    except Exception:
+                        drill = {"passed": False, "checked_at": None, "reason": "Drill result file is unreadable"}
 
                 meta = {}
                 if meta_file.exists():
@@ -319,6 +350,10 @@ def get_backups_list():
                     "has_age": age_file.exists(),
                     # .synced is written only after the remote copy is confirmed (durability gate)
                     "synced": synced_file.exists(),
+                    # Tables and rows captured in this backup (from its manifest)
+                    "contents": contents,
+                    # Latest restore drill of this exact archive, if any
+                    "drill": drill,
                     "age_size_bytes": age_file.stat().st_size if age_file.exists() else 0,
                     "metadata": meta
                 })
@@ -483,7 +518,7 @@ class AtlasDashboardHandler(SimpleHTTPRequestHandler):
                 return
 
             args = [str(BASE_DIR / "scripts" / "restore.sh"), "--app", app, "--target=test"]
-            code, out, err = run_cmd(args, timeout=180)
+            code, out, err = run_cmd(args, timeout=900)
             self.send_json({"action": "restore-test", "app": app, "exit_code": code, "output": (out + err).strip()})
 
         else:
