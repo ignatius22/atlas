@@ -346,6 +346,50 @@ else
 fi
 
 # ------------------------------------------------------------------------------
+# Dashboard serves the built React app and reports the durability marker
+# ------------------------------------------------------------------------------
+printf "\n\033[1m=== Dashboard Build & Durability Reporting Tests ===\033[0m\n"
+if (cd "${ATLAS_ROOT}" && python3 - << 'PYEOF'
+import sys, threading, urllib.request, tempfile, pathlib, time
+sys.path.insert(0, ".")
+from dashboard import server
+
+assert server.PUBLIC_DIR.name == "dist", f"dashboard serves {server.PUBLIC_DIR}, expected dashboard/dist"
+assert (server.PUBLIC_DIR / "index.html").exists(), "dashboard/dist/index.html missing: run npm run build in dashboard/web"
+
+httpd = server.HTTPServer(("127.0.0.1", 0), server.AtlasDashboardHandler)
+threading.Thread(target=httpd.serve_forever, daemon=True).start()
+html = urllib.request.urlopen(f"http://127.0.0.1:{httpd.server_port}/").read().decode()
+assert '<div id="root">' in html, "built React index.html not served at /"
+httpd.shutdown()
+
+# .synced marker must be surfaced per backup so the UI can show the durability gate
+tmp = pathlib.Path(tempfile.mkdtemp())
+app_dir = tmp / "demo"
+app_dir.mkdir()
+for name, synced in (("demo-20260101-000000.sql.gz", True), ("demo-20260102-000000.sql.gz", False)):
+    f = app_dir / name
+    f.write_bytes(b"x")
+    if synced:
+        pathlib.Path(f"{f}.synced").write_text("ok")
+real_path = server.Path
+server.get_registered_apps = lambda: {"demo": "demo_postgres"}
+server.Path = lambda p, *a: real_path(str(p).replace("/var/backups", str(tmp)), *a)
+result = {b["filename"]: b for b in server.get_backups_list()["demo"]}
+server.Path = real_path
+assert result["demo-20260101-000000.sql.gz"]["synced"] is True
+assert result["demo-20260102-000000.sql.gz"]["synced"] is False
+assert isinstance(result["demo-20260101-000000.sql.gz"]["modified_epoch"], int)
+PYEOF
+); then
+  printf "  \033[32m✓ PASS\033[0m: Dashboard serves the React build and reports .synced per backup\n"
+  PASSED=$((PASSED + 1))
+else
+  printf "  \033[31m✗ FAIL\033[0m: Dashboard build or durability reporting check failed\n"
+  FAILED=$((FAILED + 1))
+fi
+
+# ------------------------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------------------------
 printf "\n\033[1mAdversarial Tests Summary: %d passed, %d failed\033[0m\n" "${PASSED}" "${FAILED}"
