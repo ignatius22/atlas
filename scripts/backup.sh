@@ -220,7 +220,7 @@ backup_single_app() {
   
   # Safety cleanup trap on failure
   cleanup_failed_backup() {
-    rm -f "${temp_target}" "${target_file}" "${target_file}.sha256"
+    rm -f "${temp_target}" "${target_file}" "${target_file}.sha256" "${target_file}.manifest.json"
     send_atlas_notification "FAILURE" "Database Backup Failed" "Application: \`${app}\`\nContainer: \`${container}\`\nHost: \`$(hostname)\`" || true
   }
   trap cleanup_failed_backup ERR
@@ -286,10 +286,21 @@ backup_single_app() {
     return 1
   fi
   
+  # Check 5: Record what this backup contains (tables and exact row counts,
+  # read from the dump's COPY blocks). Restore drills verify against it.
+  # A COPY block without its terminator means a truncated dump.
+  if ! python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" manifest "${temp_target}" > "${target_file}.manifest.json.tmp.$$"; then
+    log_error "Backup verification failed: could not read table data from the dump (truncated or unreadable)."
+    rm -f "${target_file}.manifest.json.tmp.$$"
+    cleanup_failed_backup
+    return 1
+  fi
+
   # Move temporary target into final target filename
   mv -f "${temp_target}" "${target_file}"
+  mv -f "${target_file}.manifest.json.tmp.$$" "${target_file}.manifest.json"
   
-  # Check 5: Generate SHA-256 Checksum
+  # Check 6: Generate SHA-256 Checksum
   sha256sum "${target_file}" > "${target_file}.sha256"
   
   local file_size
@@ -297,7 +308,7 @@ backup_single_app() {
   local checksum
   checksum="$(cut -d' ' -f1 < "${target_file}.sha256")"
   
-  # Check 6: Enforce retention policy strictly within target_dir
+  # Check 7: Enforce retention policy strictly within target_dir
   local pruned_count=0
   local preserved_count=0
   if [ "${retention}" -gt 0 ]; then
@@ -305,7 +316,7 @@ backup_single_app() {
       if [ -n "${old_file}" ] && [ -f "${old_file}" ]; then
         if [ -f "${old_file}.synced" ]; then
           log_info "Pruning replicated expired backup: $(basename "${old_file}")"
-          rm -f "${old_file}" "${old_file}.sha256" "${old_file}.age" "${old_file}.age.sha256" "${old_file}.meta.json" "${old_file}.synced"
+          rm -f "${old_file}" "${old_file}.sha256" "${old_file}.age" "${old_file}.age.sha256" "${old_file}.meta.json" "${old_file}.manifest.json" "${old_file}.drill.json" "${old_file}.synced"
           pruned_count=$((pruned_count + 1))
         else
           log_warn "PRESERVING un-replicated backup despite retention expiry: $(basename "${old_file}") (missing .synced durability marker)"
@@ -327,6 +338,7 @@ backup_single_app() {
   log_info "  Compressed Size:   ${file_size}"
   log_info "  Decompressed Size: ${decompressed_bytes} bytes"
   log_info "  SHA-256 Checksum:  ${checksum}"
+  log_info "  Contents:          $(python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" summary "${target_file}.manifest.json" 2>/dev/null || echo "unknown")"
   log_info "  Retention:         Kept <= ${retention} days (pruned ${pruned_count} replicated files, preserved ${preserved_count} un-replicated files)"
   return 0
 }
