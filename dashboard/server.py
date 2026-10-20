@@ -18,7 +18,8 @@ from urllib.parse import urlparse
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-PUBLIC_DIR = Path(__file__).resolve().parent / "public"
+# Built React app (dashboard/web -> dashboard/dist). Committed so the VPS never needs Node.js.
+PUBLIC_DIR = Path(__file__).resolve().parent / "dist"
 ENV_FILE = BASE_DIR / ".env"
 APPS_FILE = BASE_DIR / "config" / "apps.yml"
 
@@ -62,6 +63,8 @@ def run_cmd(args, timeout=30, env=None):
         return res.returncode, res.stdout, res.stderr
     except subprocess.TimeoutExpired:
         return 124, "", "Command timed out"
+    except FileNotFoundError:
+        return 127, "", f"{Path(args[0]).name} is not installed on this server"
     except Exception as e:
         return 1, "", str(e)
 
@@ -288,6 +291,7 @@ def get_backups_list():
             for f in sorted(app_dir.glob(f"{app}-*.sql.gz"), reverse=True):
                 sha_file = Path(f"{f}.sha256")
                 age_file = Path(f"{f}.age")
+                synced_file = Path(f"{f}.synced")
                 meta_file = Path(f"{f}.meta.json")
 
                 sha = ""
@@ -309,9 +313,12 @@ def get_backups_list():
                     "size_bytes": f.stat().st_size,
                     "size_human": f"{round(f.stat().st_size / 1024, 1)} KB",
                     "modified": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(f.stat().st_mtime)),
+                    "modified_epoch": int(f.stat().st_mtime),
                     "sha256": sha,
                     "sha256_short": sha[:12] + "..." if sha else "",
                     "has_age": age_file.exists(),
+                    # .synced is written only after the remote copy is confirmed (durability gate)
+                    "synced": synced_file.exists(),
                     "age_size_bytes": age_file.stat().st_size if age_file.exists() else 0,
                     "metadata": meta
                 })
@@ -352,6 +359,14 @@ def get_remote_objects():
     }
 
 class AtlasDashboardHandler(SimpleHTTPRequestHandler):
+    extensions_map = {
+        **SimpleHTTPRequestHandler.extensions_map,
+        ".js": "text/javascript",
+        ".css": "text/css",
+        ".woff2": "font/woff2",
+        ".woff": "font/woff",
+    }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(PUBLIC_DIR), **kwargs)
 
@@ -491,7 +506,8 @@ def main():
         sys.stderr.write("The Atlas Dashboard refuses to start without authentication configured.\n")
         sys.exit(1)
 
-    if not PUBLIC_DIR.exists():
+    if not (PUBLIC_DIR / "index.html").exists():
+        sys.stderr.write(f"WARNING: dashboard build not found at {PUBLIC_DIR}. Run: cd dashboard/web && npm ci && npm run build\n")
         PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
     server_address = (HOST, PORT)
     httpd = HTTPServer(server_address, AtlasDashboardHandler)
