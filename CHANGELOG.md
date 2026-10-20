@@ -15,6 +15,9 @@ All notable changes to Atlas will be documented in this file.
 - Dashboard private-key scan is cached (default 10 minutes, `ATLAS_KEY_SCAN_TTL`) and skips files over 64 KB.
 - `scripts/test-offsite-backup.sh` now requires an app name.
 
+### Removed
+- `infra/nginx/production/`: live nginx configs for our own sites. They were never read from the repo (the server uses its own copies in `/etc/nginx`). Generic `nginx.conf`, snippets and the app template remain.
+
 ### Fixed
 - `tests/test-systemd.sh` and `tests/test-notifications-dashboard.sh` are now executable, so `make test` passes locally.
 
