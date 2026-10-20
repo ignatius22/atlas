@@ -227,30 +227,93 @@ DB_NAME="$(get_app_property "${APP_TARGET}" "database.name")"
 # Step 5: Execute Restore against Target Environment
 case "${TARGET_ENV}" in
   test|temporary|temp)
-    log_info "Mode: ISOLATED TEST RESTORE"
-    log_info "Spawning temporary PostgreSQL container..."
-    
+    log_info "Mode: ISOLATED TEST RESTORE (restore drill)"
+
     TEMP_NAME="atlas_restore_test_${APP_TARGET}_$(date +%s)"
     TEST_USER="${DB_USER:-test_user}"
     if [ "${TEST_USER}" = "null" ]; then TEST_USER="test_user"; fi
     TEST_DB="${DB_NAME:-test_db}"
     if [ "${TEST_DB}" = "null" ]; then TEST_DB="test_db"; fi
     TEST_PASS="atlas_test_password_2026"
-    
-    # Cleanup trap
+    DRILL_STARTED="$(date +%s)"
+    DRILL_WORK="$(mktemp -d)"
+
+    # Restore with the same Postgres image production runs, so a dump from a
+    # newer server is tested on that version. Override with database.restore_image.
+    RESTORE_IMAGE="$(get_app_property "${APP_TARGET}" "database.restore_image")"
+    if [ -z "${RESTORE_IMAGE}" ] || [ "${RESTORE_IMAGE}" = "null" ]; then
+      RESTORE_IMAGE=""
+      if [ -n "${PROD_CONTAINER}" ] && [ "${PROD_CONTAINER}" != "null" ]; then
+        RESTORE_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${PROD_CONTAINER}" 2>/dev/null || true)"
+      fi
+      RESTORE_IMAGE="${RESTORE_IMAGE:-postgres:16-alpine}"
+    fi
+    if ! [[ "${RESTORE_IMAGE}" =~ ^[a-zA-Z0-9][a-zA-Z0-9._/:@-]*$ ]]; then
+      log_error "Invalid restore image reference: '${RESTORE_IMAGE}'"
+      exit 1
+    fi
+
+    # Record the drill outcome next to the archive so the scheduler, CLI and
+    # dashboard all read the same result. Only for archives in the app's own
+    # backup directory, never next to an arbitrary external file.
+    record_drill() {
+      local passed="$1" reason="$2" verify_json="${3:-}"
+      case "$(cd "$(dirname "${BACKUP_FILE}")" && pwd)/" in
+        "${APP_BACKUP_DIR}/") ;;
+        *) return 0 ;;
+      esac
+      python3 -I - "${BACKUP_FILE}.drill.json" "${APP_TARGET}" "$(basename "${BACKUP_FILE}")" \
+        "${passed}" "${reason}" "${DRILL_STARTED}" "${RESTORE_IMAGE}" "${verify_json}" << 'PYEOF' || log_warn "Could not record drill result."
+import json, os, sys, time
+out, app, backup, passed, reason, started, image, verify_path = sys.argv[1:9]
+result = {
+    "format": 1,
+    "app": app,
+    "backup": backup,
+    "passed": passed == "true",
+    "checked_at": int(time.time()),
+    "duration_s": int(time.time()) - int(started),
+    "image": image,
+    "reason": reason,
+}
+if verify_path and os.path.exists(verify_path):
+    try:
+        with open(verify_path) as fh:
+            result.update(json.load(fh))
+    except ValueError:
+        pass
+tmp = f"{out}.tmp.{os.getpid()}"
+with open(tmp, "w") as fh:
+    json.dump(result, fh, indent=2)
+os.replace(tmp, out)
+PYEOF
+    }
+
+    drill_failed() {
+      local reason="$1" verify_json="${2:-}"
+      log_error "Restore drill FAILED: ${reason}"
+      record_drill false "${reason}" "${verify_json}"
+      send_atlas_notification "FAILURE" "Atlas Restore Drill Failed" "Application: \`${APP_TARGET}\`\nArchive: \`$(basename "${BACKUP_FILE}")\`\nError: ${reason}\nHost: \`$(hostname)\`" || true
+      exit 1
+    }
+
     cleanup_test_container() {
       log_info "Cleaning up temporary test container '${TEMP_NAME}'..."
       docker stop "${TEMP_NAME}" >/dev/null 2>&1 || true
       docker rm -f "${TEMP_NAME}" >/dev/null 2>&1 || true
+      rm -rf "${DRILL_WORK}"
     }
     trap cleanup_test_container EXIT
-    
-    docker run -d --name "${TEMP_NAME}" \
+
+    log_info "Spawning temporary PostgreSQL container from ${RESTORE_IMAGE}..."
+    if ! docker run -d --name "${TEMP_NAME}" \
       -e POSTGRES_USER="${TEST_USER}" \
       -e POSTGRES_PASSWORD="${TEST_PASS}" \
       -e POSTGRES_DB="${TEST_DB}" \
-      postgres:16-alpine >/dev/null
-      
+      "${RESTORE_IMAGE}" >/dev/null; then
+      drill_failed "Could not start a temporary database from image ${RESTORE_IMAGE}."
+    fi
+
     log_info "Waiting for temporary database to accept connections..."
     sleep 2
     for i in {1..30}; do
@@ -261,26 +324,45 @@ case "${TARGET_ENV}" in
       fi
       sleep 1
       if [ "$i" -eq 30 ]; then
-        log_error "Temporary test database container failed to start in 30s."
-        send_atlas_notification "FAILURE" "Atlas Restore Drill Failed" "Application: \`${APP_TARGET}\`\nTarget: test\nArchive: \`$(basename "${BACKUP_FILE}")\`\nError: Ephemeral container failed to accept connections within 30s on host \`$(hostname)\`." || true
-        exit 1
+        drill_failed "Temporary database did not accept connections within 30 seconds."
       fi
     done
-    
+
+    # What the backup should contain. Older archives have no manifest yet;
+    # it is derived from the dump itself, so build it now.
+    MANIFEST="${BACKUP_FILE}.manifest.json"
+    if [ ! -f "${MANIFEST}" ]; then
+      MANIFEST="${DRILL_WORK}/manifest.json"
+      if ! python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" manifest "${BACKUP_FILE}" > "${MANIFEST}"; then
+        drill_failed "Could not read table data from the archive (truncated or unreadable)."
+      fi
+    fi
+
     log_info "Restoring SQL dump into test database with ON_ERROR_STOP=1..."
-    # -v ON_ERROR_STOP=1 ensures any SQL error aborts with non-zero exit code
     gzip -dc "${BACKUP_FILE}" | docker exec -i "${TEMP_NAME}" \
-      sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec psql -v ON_ERROR_STOP=1 -U "$1" -d "$2"' _ "${TEST_USER}" "${TEST_DB}" || {
-        log_error "Database restore failed! SQL error encountered."
-        send_atlas_notification "FAILURE" "Atlas Restore Drill Failed" "Application: \`${APP_TARGET}\`\nTarget: test\nArchive: \`$(basename "${BACKUP_FILE}")\`\nError: SQL error encountered during test restore on host \`$(hostname)\`." || true
-        exit 1
+      sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec psql -q -v ON_ERROR_STOP=1 -U "$1" -d "$2"' _ "${TEST_USER}" "${TEST_DB}" > "${DRILL_WORK}/restore.log" 2>&1 || {
+        tail -n 5 "${DRILL_WORK}/restore.log" >&2 || true
+        drill_failed "SQL error while restoring: $(grep -m1 -E 'ERROR' "${DRILL_WORK}/restore.log" | cut -c1-200 || echo 'see log')"
       }
-    
-    log_success "Database restore executed without errors."
-    log_info "Inspecting restored relations..."
-    docker exec -i "${TEMP_NAME}" sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec psql -U "$1" -d "$2" -c "\dt"' _ "${TEST_USER}" "${TEST_DB}" || true
-    
-    log_success "TEST RESTORE VERIFICATION COMPLETED SUCCESSFULLY!"
+    log_pass "Database restore executed without errors."
+
+    log_info "Verifying every table's row count against the backup manifest..."
+    python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" count-sql "${MANIFEST}" > "${DRILL_WORK}/count.sql"
+    if ! docker exec -i "${TEMP_NAME}" \
+      sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec psql -At -F "	" -v ON_ERROR_STOP=1 -U "$1" -d "$2"' _ "${TEST_USER}" "${TEST_DB}" \
+      < "${DRILL_WORK}/count.sql" > "${DRILL_WORK}/counts.tsv" 2> "${DRILL_WORK}/count.err"; then
+      drill_failed "Restored database is missing tables: $(head -c 200 "${DRILL_WORK}/count.err")"
+    fi
+
+    if ! python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" compare "${MANIFEST}" "${DRILL_WORK}/counts.tsv" > "${DRILL_WORK}/verify.json"; then
+      MISMATCH="$(python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" summary "${DRILL_WORK}/verify.json" 2>/dev/null || echo "row counts differ")"
+      drill_failed "Restored data does not match the backup: ${MISMATCH}" "${DRILL_WORK}/verify.json"
+    fi
+
+    SUMMARY="$(python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" summary "${DRILL_WORK}/verify.json")"
+    record_drill true "" "${DRILL_WORK}/verify.json"
+    log_pass "Verified ${SUMMARY} match the backup."
+    log_success "RESTORE DRILL PASSED for '${APP_TARGET}' ($(( $(date +%s) - DRILL_STARTED ))s)."
     ;;
 
   production|prod)

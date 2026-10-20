@@ -1,0 +1,14 @@
+[Unit]
+Description=Atlas Daily Restore Drill Timer
+Documentation=https://github.com/ignatius22/atlas
+Requires=atlas-drill.service
+
+[Timer]
+# 03:30 UTC: after the 00:00 backup and sync, away from the 06:00 run.
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=900
+Persistent=true
+AccuracySec=1m
+
+[Install]
+WantedBy=timers.target

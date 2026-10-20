@@ -6,6 +6,7 @@ import { ChainTrack } from "./ChainTrack";
 const HEALTH_TEXT: Record<AppChain["health"], string> = {
   recoverable: "Recoverable",
   "at-risk": "At risk",
+  "drill-failed": "Restore failed",
   unprotected: "Unprotected",
   "no-backups": "No backups",
 };
@@ -48,7 +49,7 @@ export function AppRow({ chain, backups, now, busy, onAction }: Props) {
           disabled={!!busy || !chain.newest}
           onClick={() => onAction("restore-test", chain.app)}
         >
-          {busy === "restore-test" ? "Testing restore…" : "Test restore"}
+          {busy === "restore-test" ? "Running drill…" : "Run restore drill"}
         </button>
         {recent.length > 0 && (
           <button
@@ -58,7 +59,7 @@ export function AppRow({ chain, backups, now, busy, onAction }: Props) {
             aria-controls={historyId}
             onClick={() => setOpen((o) => !o)}
           >
-            {open ? "Hide backups" : `Show ${recent.length} recent backups`}
+            {open ? "Hide backups" : `Show ${recent.length} recent backup${recent.length === 1 ? "" : "s"}`}
           </button>
         )}
       </div>
@@ -74,6 +75,7 @@ export function AppRow({ chain, backups, now, busy, onAction }: Props) {
                 <th scope="col">Checksum</th>
                 <th scope="col">Encrypted</th>
                 <th scope="col">Offsite</th>
+                <th scope="col">Restore test</th>
               </tr>
             </thead>
             <tbody>
@@ -86,6 +88,9 @@ export function AppRow({ chain, backups, now, busy, onAction }: Props) {
                   </td>
                   <td>{b.has_age ? "Yes" : "No"}</td>
                   <td>{b.synced ? "Confirmed" : "Local only"}</td>
+                  <td className={b.drill ? (b.drill.passed ? "tone-ok" : "tone-bad") : undefined} title={b.drill?.reason || undefined}>
+                    {b.drill ? (b.drill.passed ? "Passed" : "Failed") : "Not tested"}
+                  </td>
                 </tr>
               ))}
             </tbody>

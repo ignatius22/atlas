@@ -21,7 +21,7 @@ export interface SystemStatus {
     recipient_masked: string;
   };
   offsite: { provider: string; bucket: string; configured: boolean };
-  scheduler: { type: "systemd" | "cron" | "none"; active: boolean; rpo: string };
+  scheduler: { type: "systemd" | "cron" | "none"; active: boolean; rpo: string; drills_active?: boolean };
 }
 
 export interface Backup {
@@ -35,7 +35,21 @@ export interface Backup {
   has_age: boolean;
   age_size_bytes: number;
   synced?: boolean;
+  contents?: { tables: number; rows: number } | null;
+  drill?: RecordedDrill | null;
   metadata: Record<string, unknown>;
+}
+
+// Result of scripts/restore.sh --target=test, stored as <archive>.drill.json.
+export interface RecordedDrill {
+  passed: boolean;
+  checked_at: number | null; // epoch seconds
+  duration_s?: number;
+  reason: string;
+  tables_verified?: number;
+  tables_expected?: number;
+  rows_found?: number;
+  image?: string;
 }
 
 export type BackupsByApp = Record<string, Backup[]>;
