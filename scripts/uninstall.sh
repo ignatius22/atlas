@@ -11,13 +11,16 @@ SYSTEMD_DIR="${ATLAS_SYSTEMD_DIR:-/etc/systemd/system}"
 echo "Uninstalling Atlas V1..."
 
 # Disable and remove systemd timers and services if present
-if [ -f "${SYSTEMD_DIR}/atlas-backup.timer" ] || [ -f "${SYSTEMD_DIR}/atlas-backup.service" ] || [ -f "${SYSTEMD_DIR}/atlas-dashboard.service" ]; then
+if [ -f "${SYSTEMD_DIR}/atlas-backup.timer" ] || [ -f "${SYSTEMD_DIR}/atlas-backup.service" ] || [ -f "${SYSTEMD_DIR}/atlas-dashboard.service" ] \
+   || [ -f "${SYSTEMD_DIR}/atlas-drill.timer" ] || [ -f "${SYSTEMD_DIR}/atlas-drill.service" ]; then
   if command -v systemctl >/dev/null 2>&1; then
     echo "Disabling systemd units..."
     systemctl disable --now atlas-backup.timer 2>/dev/null || true
     systemctl disable --now atlas-dashboard.service 2>/dev/null || true
+    systemctl disable --now atlas-drill.timer 2>/dev/null || true
   fi
-  rm -f "${SYSTEMD_DIR}/atlas-backup.timer" "${SYSTEMD_DIR}/atlas-backup.service" "${SYSTEMD_DIR}/atlas-dashboard.service"
+  rm -f "${SYSTEMD_DIR}/atlas-backup.timer" "${SYSTEMD_DIR}/atlas-backup.service" "${SYSTEMD_DIR}/atlas-dashboard.service" \
+    "${SYSTEMD_DIR}/atlas-drill.timer" "${SYSTEMD_DIR}/atlas-drill.service"
   if command -v systemctl >/dev/null 2>&1; then
     systemctl daemon-reload || true
   fi

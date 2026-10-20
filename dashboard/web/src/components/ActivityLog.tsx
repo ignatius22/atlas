@@ -12,7 +12,7 @@ export interface LogEntry {
 const VERB: Record<ActionName, string> = {
   backup: "Backup",
   sync: "Offsite upload",
-  "restore-test": "Test restore",
+  "restore-test": "Restore drill",
 };
 
 const RESULT: Record<LogEntry["state"], string> = {
