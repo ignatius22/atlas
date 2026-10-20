@@ -132,15 +132,32 @@ if command -v age >/dev/null 2>&1 && command -v age-keygen >/dev/null 2>&1; then
   assert_eq 0 $? "Multi-recipient archive decryptable by Key B (Escrow/Rotation key)"
 fi
 
-echo "=== 5. Mutex Concurrency Lock Protection Tests ==="
-LOCK_DIR="/tmp/atlas_sync_offsite.lock.d"
-mkdir -p "${LOCK_DIR}"
-set +e
-"${ATLAS_ROOT}/scripts/sync-offsite.sh" --app=testapp --dry-run >/dev/null 2>&1
-LOCK_RET=$?
-set -e
-assert_eq 1 "${LOCK_RET}" "sync-offsite.sh refuses to run when mutex lock directory exists"
-rm -rf "${LOCK_DIR}"
+echo "=== 5. Kernel Lock Protection Tests ==="
+export ATLAS_LOCK_DIR="${TMP_DIR}/locks"
+mkdir -p "${ATLAS_LOCK_DIR}"
+lock_msg() { "$@" 2>&1 | grep -c "currently running" || true; }
+
+for script in sync-offsite backup; do
+  lock_name="sync"; [ "${script}" = "backup" ] && lock_name="backup"
+  LOCK_FILE="${ATLAS_LOCK_DIR}/${lock_name}.lock"
+
+  # A live holder blocks a second run.
+  # The holder process itself owns the lock descriptor, so killing it is a real crash.
+  ( exec 9> "${LOCK_FILE}"; flock -x 9; exec sleep 30 ) &
+  HOLDER=$!
+  for _ in $(seq 50); do flock -n "${LOCK_FILE}" -c true 2>/dev/null || break; sleep 0.1; done
+  assert_eq 1 "$(lock_msg "${ATLAS_ROOT}/scripts/${script}.sh" --app=testapp --dry-run)" "${script}.sh refuses to run while another run holds the lock"
+
+  # kill -9 the holder: the kernel drops the lock, so nothing is left behind.
+  { kill -9 "${HOLDER}"; wait "${HOLDER}"; } 2>/dev/null || true
+  assert_eq 0 "$(lock_msg "${ATLAS_ROOT}/scripts/${script}.sh" --app=testapp --dry-run)" "${script}.sh runs after the lock holder is killed (no stale lock)"
+done
+
+# Leftover lock directories from older versions no longer block anything.
+mkdir -p /tmp/atlas_sync_offsite.lock.d /tmp/atlas_backup.lock.d 2>/dev/null || true
+assert_eq 0 "$(lock_msg "${ATLAS_ROOT}/scripts/sync-offsite.sh" --app=testapp --dry-run)" "Old /tmp lock directories are ignored"
+rmdir /tmp/atlas_sync_offsite.lock.d /tmp/atlas_backup.lock.d 2>/dev/null || true
+unset ATLAS_LOCK_DIR
 
 echo "=== 6. Immutable Remote Reconciliation Tests ==="
 FAKE_BIN="${TMP_DIR}/fake-bin"
