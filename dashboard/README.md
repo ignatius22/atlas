@@ -6,7 +6,7 @@ The **Atlas Web Dashboard** is a zero-dependency, real-time control center and v
 
 ## Features
 
-* **Live Database & Container Health Cards:** Real-time metrics, status, and health checks for `catalogflow_postgres`, `sand2keys-db`, and `wdni_prod_postgres`.
+* **Live Database & Container Health Cards:** Real-time metrics, status, and health checks for every database container registered in `config/apps.yml`.
 * **Local Encrypted Backups Explorer:** Filter backups by application, view size, timestamp, SHA-256 checksums (with 1-click copy), and age encryption badges.
 * **Cloudflare R2 Remote Explorer:** Real-time browser of encrypted objects in `atlas-production-backups` (`.age`, `.sha256`, `.meta.json`).
 * **Interactive Disaster Recovery Controls:**

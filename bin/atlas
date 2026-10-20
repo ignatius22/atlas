@@ -56,30 +56,26 @@ fi
 CMD="$1"
 shift
 
+# Build the argument list for a sub-script without any shell re-parsing.
+# The first bare word becomes --app=<word>; flags pass through untouched.
+# Result is stored in the NORMALIZED_ARGS array.
 normalize_args() {
+  NORMALIZED_ARGS=()
   local target=""
-  local extra_args=()
+  local arg
   for arg in "$@"; do
-    if [[ "${arg}" =~ ^--app= ]]; then
-      extra_args+=("${arg}")
-    elif [[ "${arg}" =~ ^- ]]; then
-      extra_args+=("${arg}")
-    elif [ -z "${target}" ]; then
-      target="${arg}"
+    if [[ "${arg}" == -* ]] || [ -n "${target}" ]; then
+      NORMALIZED_ARGS+=("${arg}")
     else
-      extra_args+=("${arg}")
+      target="${arg}"
+      NORMALIZED_ARGS+=("--app=${target}")
     fi
   done
-  if [ -n "${target}" ]; then
-    echo "--app=${target} ${extra_args[*]:-}"
-  else
-    echo "${extra_args[*]:-}"
-  fi
 }
 
 case "${CMD}" in
   version)
-    echo "Atlas v1.0.0 (Production Engine)"
+    echo "Atlas v$(tr -d '[:space:]' < "${ATLAS_DIR}/VERSION" 2>/dev/null || echo unknown)"
     exit 0
     ;;
 
@@ -134,11 +130,11 @@ case "${CMD}" in
   backup)
     SUBCMD="${1:-}"
     shift || true
-    args="$(normalize_args "$@")"
+    normalize_args "$@"
     case "${SUBCMD}" in
-      create) eval "${SCRIPTS_DIR}/backup.sh ${args}" ;;
-      sync)   eval "${SCRIPTS_DIR}/sync-offsite.sh ${args}" ;;
-      list)   eval "${SCRIPTS_DIR}/restore-offsite.sh --list ${args}" ;;
+      create) exec "${SCRIPTS_DIR}/backup.sh" ${NORMALIZED_ARGS[@]+"${NORMALIZED_ARGS[@]}"} ;;
+      sync)   exec "${SCRIPTS_DIR}/sync-offsite.sh" ${NORMALIZED_ARGS[@]+"${NORMALIZED_ARGS[@]}"} ;;
+      list)   exec "${SCRIPTS_DIR}/restore-offsite.sh" --list ${NORMALIZED_ARGS[@]+"${NORMALIZED_ARGS[@]}"} ;;
       *)
         log_error "Unknown backup subcommand: ${SUBCMD}. Available: create, sync, list"
         exit 1
@@ -149,10 +145,10 @@ case "${CMD}" in
   restore)
     SUBCMD="${1:-}"
     shift || true
-    args="$(normalize_args "$@")"
+    normalize_args "$@"
     case "${SUBCMD}" in
-      test) eval "${SCRIPTS_DIR}/restore-offsite.sh --target=test ${args}" ;;
-      run)  eval "${SCRIPTS_DIR}/restore.sh ${args}" ;;
+      test) exec "${SCRIPTS_DIR}/restore-offsite.sh" --target=test ${NORMALIZED_ARGS[@]+"${NORMALIZED_ARGS[@]}"} ;;
+      run)  exec "${SCRIPTS_DIR}/restore.sh" ${NORMALIZED_ARGS[@]+"${NORMALIZED_ARGS[@]}"} ;;
       *)
         log_error "Unknown restore subcommand: ${SUBCMD}. Available: test, run"
         exit 1
