@@ -195,14 +195,14 @@ Declare every application in `/opt/atlas/config/apps.yml`:
 
 ```yaml
 apps:
-  catalogflow:
-    directory: /var/www/catalogflow
-    domain: catalogflow.example.com
+  myapp:
+    directory: /var/www/myapp
+    domain: myapp.example.com
     port: 3000
     health_endpoint: /api/health
     database:
       type: postgres
-      container: catalogflow_postgres
+      container: myapp_postgres
       user: catalog_user
       name: catalog_production
       backup: true
@@ -274,28 +274,28 @@ Let's create your first verified database backup step-by-step.
 
 ### Step 2: Trigger a Backup
 ```bash
-/opt/atlas/scripts/backup.sh --app=catalogflow
+/opt/atlas/scripts/backup.sh --app=myapp
 ```
 *Expected Output:*
 ```text
-[INFO] Atlas Backup Engine starting for app: catalogflow
-[INFO] Dumping PostgreSQL database 'catalog_production' from container 'catalogflow_postgres'...
+[INFO] Atlas Backup Engine starting for app: myapp
+[INFO] Dumping PostgreSQL database 'catalog_production' from container 'myapp_postgres'...
 [INFO] Compressing SQL stream with gzip -9...
-[INFO] Generated archive: /var/backups/catalogflow/catalogflow-20260906T080000Z.sql.gz (8.2 KB)
+[INFO] Generated archive: /var/backups/myapp/myapp-20260906T080000Z.sql.gz (8.2 KB)
 [INFO] Computing SHA-256 integrity checksum...
 [INFO] Writing metadata manifest...
 [INFO] Checking local retention policy (preserving all un-synced archives)...
-[PASS] Backup complete for catalogflow
+[PASS] Backup complete for myapp
 ```
 
 ### Step 3: Inspect the Generated Files
 ```bash
-ls -la /var/backups/catalogflow/
+ls -la /var/backups/myapp/
 ```
 You will see three files created:
-1. `catalogflow-20260906T080000Z.sql.gz` (Compressed dump)
-2. `catalogflow-20260906T080000Z.sql.gz.sha256` (SHA-256 hash)
-3. `catalogflow-20260906T080000Z.sql.gz.meta.json` (Metadata manifest)
+1. `myapp-20260906T080000Z.sql.gz` (Compressed dump)
+2. `myapp-20260906T080000Z.sql.gz.sha256` (SHA-256 hash)
+3. `myapp-20260906T080000Z.sql.gz.meta.json` (Metadata manifest)
 
 ---
 
@@ -320,10 +320,10 @@ The `.synced` file is not just a status flag—it is a **cryptographic authoriza
 
 ### The Replication Flow
 ```bash
-/opt/atlas/scripts/sync-offsite.sh --app=catalogflow
+/opt/atlas/scripts/sync-offsite.sh --app=myapp
 ```
 
-1. **Discovery**: `sync-offsite.sh` scans `/var/backups/catalogflow/` for any `.sql.gz` file lacking a `.synced` marker.
+1. **Discovery**: `sync-offsite.sh` scans `/var/backups/myapp/` for any `.sql.gz` file lacking a `.synced` marker.
 2. **Encryption**: Encrypts the archive using `age -r ${ATLAS_AGE_RECIPIENT}` into `<app>-<TS>.sql.gz.age`.
 3. **Bounded Retry Upload**: Attempts upload to Cloudflare R2 / S3 up to **3 times** with exponential backoff (5s, 10s, 20s).
 4. **Remote Verification Gate**: Queries the cloud storage bucket via `rclone lsf` or `aws s3 ls` to verify the object was written.
@@ -373,14 +373,14 @@ Atlas provides two distinct restoration targets:
 
 ### Target 1: Ephemeral Sandbox Test (`--target=test`)
 ```bash
-/opt/atlas/scripts/restore.sh --app=catalogflow --target=test
+/opt/atlas/scripts/restore.sh --app=myapp --target=test
 ```
 * **Production Impact**: **Zero**.
-* **Behavior**: Launches a temporary container (`test_catalogflow_db`), streams the backup with `ON_ERROR_STOP=1`, verifies schema/row counts, and destroys the container.
+* **Behavior**: Launches a temporary container (`test_myapp_db`), streams the backup with `ON_ERROR_STOP=1`, verifies schema/row counts, and destroys the container.
 
 ### Target 2: Live Production Recovery (`--target=production`)
 ```bash
-/opt/atlas/scripts/restore.sh --app=catalogflow --target=production
+/opt/atlas/scripts/restore.sh --app=myapp --target=production
 ```
 * **Production Impact**: **Full database overwrite**.
 * **Safeguards**:
@@ -696,7 +696,7 @@ ATLAS_NOTIFY_SUCCESS=false
 **A:** Atlas performs bounded retries and logs the failure. Crucially, the local retention engine detects that the `.synced` marker is missing and **refuses to delete** local backups until cloud connectivity returns and the backlog is verified.
 
 #### Q: Can Atlas restore multiple applications?
-**A:** Yes. Atlas supports multiple applications defined in `config/apps.yml` (e.g. `catalogflow`, `sand2keys`, `wdni`).
+**A:** Yes. Atlas supports multiple applications defined in `config/apps.yml` (e.g. `myapp`, `sand2keys`, `wdni`).
 
 #### Q: What happens if one app fails during `backup.sh --all`?
 **A:** Atlas isolates application failures. If App A fails, an alert is logged and Atlas proceeds to snapshot App B and App C.
