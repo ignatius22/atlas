@@ -10,7 +10,9 @@ User=root
 Group=root
 WorkingDirectory=/opt/atlas
 EnvironmentFile=-/opt/atlas/.env
-ExecStart=/bin/bash -c '/opt/atlas/scripts/backup.sh --all && /opt/atlas/scripts/sync-offsite.sh --all'
+# Sync runs even if one app's backup failed, so a single stopped container
+# never blocks the other apps' backups from reaching offsite storage.
+ExecStart=/bin/bash -c 'rc=0; /opt/atlas/scripts/backup.sh --all || rc=1; /opt/atlas/scripts/sync-offsite.sh --all || rc=1; exit $rc'
 StandardOutput=journal
 StandardError=journal
 
