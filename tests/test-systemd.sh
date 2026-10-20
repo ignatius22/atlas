@@ -68,7 +68,7 @@ assert_true "[ -f '${TIMER_FILE}' ]" "systemd/atlas-backup.timer file exists in 
 assert_file_contains "${SERVICE_FILE}" "^Type=oneshot" "Service Type is oneshot"
 assert_file_contains "${SERVICE_FILE}" "^User=root" "Service runs as User=root"
 assert_file_contains "${SERVICE_FILE}" "^EnvironmentFile=-/opt/atlas/\.env" "Service loads .env safely via EnvironmentFile="
-assert_file_contains "${SERVICE_FILE}" "ExecStart=.*backup\.sh --all && .*sync-offsite\.sh --all" "ExecStart executes backup.sh --all followed by sync-offsite.sh --all"
+assert_file_contains "${SERVICE_FILE}" "ExecStart=.*backup\.sh --all \|\| rc=1; .*sync-offsite\.sh --all \|\| rc=1; exit" "ExecStart runs sync-offsite.sh --all even if a backup fails, and still reports failure"
 assert_file_contains "${SERVICE_FILE}" "^StandardOutput=journal" "StandardOutput sends to journald"
 assert_file_contains "${SERVICE_FILE}" "^StandardError=journal" "StandardError sends to journald"
 
@@ -94,6 +94,18 @@ assert_file_contains "${TIMER_FILE}" "Persistent=true" "Timer uses Persistent=tr
 assert_file_contains "${TIMER_FILE}" "WantedBy=timers\.target" "Timer installs under timers.target"
 assert_file_contains "${TIMER_FILE}" "OnCalendar=.*(00,06,12,18|00/6)" "Timer triggers every six hours"
 assert_file_contains "${TIMER_FILE}" "RandomizedDelaySec=" "Timer specifies a randomized start delay"
+
+# ------------------------------------------------------------------------------
+# Test 6b: Daily Restore Drill Units
+# ------------------------------------------------------------------------------
+DRILL_SERVICE="${ATLAS_ROOT}/systemd/atlas-drill.service"
+DRILL_TIMER="${ATLAS_ROOT}/systemd/atlas-drill.timer"
+assert_true "[ -f '${DRILL_SERVICE}' ] && [ -f '${DRILL_TIMER}' ]" "systemd/atlas-drill.service and .timer exist in repository"
+assert_file_contains "${DRILL_SERVICE}" "^ExecStart=/opt/atlas/scripts/drill\.sh --all" "Drill service runs drill.sh --all"
+assert_file_contains "${DRILL_SERVICE}" "^Type=oneshot" "Drill service is oneshot"
+assert_file_contains "${DRILL_TIMER}" "Persistent=true" "Drill timer catches up after downtime"
+assert_file_contains "${DRILL_TIMER}" "^OnCalendar=" "Drill timer has a daily schedule"
+assert_file_not_contains "${DRILL_SERVICE}" "(password|secret_key|age1|bearer|token)[[:space:]]*=" "No secrets hardcoded in atlas-drill.service"
 
 # ------------------------------------------------------------------------------
 # Test 7: Portable Systemd Syntax Validation
@@ -144,6 +156,10 @@ assert_file_contains "${INSTALLED_SERVICE}" "${TMP_INSTALL}/scripts/backup\.sh -
 assert_file_contains "${INSTALLED_SERVICE}" "${TMP_INSTALL}/scripts/sync-offsite\.sh --all" "Installer service references custom install dir for sync-offsite.sh"
 assert_file_contains "${INSTALLED_SERVICE}" "EnvironmentFile=-${TMP_INSTALL}/\.env" "Installer service references custom install dir for .env"
 assert_file_contains "${INSTALLED_SERVICE}" "WorkingDirectory=${TMP_INSTALL}" "Installer service references custom install dir for WorkingDirectory"
+INSTALLED_DRILL_SERVICE="${TMP_SYSTEMD}/atlas-drill.service"
+INSTALLED_DRILL_TIMER="${TMP_SYSTEMD}/atlas-drill.timer"
+assert_true "[ -f '${INSTALLED_DRILL_SERVICE}' ] && [ -f '${INSTALLED_DRILL_TIMER}' ]" "Installer creates drill service and timer"
+assert_file_contains "${INSTALLED_DRILL_SERVICE}" "${TMP_INSTALL}/scripts/drill\.sh --all" "Installer drill service references custom install dir"
 
 # ------------------------------------------------------------------------------
 # Test 9: Uninstaller Test
@@ -155,6 +171,7 @@ ATLAS_SYSTEMD_DIR="${TMP_SYSTEMD}" \
 
 assert_true "[ ! -f '${INSTALLED_SERVICE}' ]" "Uninstaller removes service file from target systemd directory"
 assert_true "[ ! -f '${INSTALLED_TIMER}' ]" "Uninstaller removes timer file from target systemd directory"
+assert_true "[ ! -f '${INSTALLED_DRILL_SERVICE}' ] && [ ! -f '${INSTALLED_DRILL_TIMER}' ]" "Uninstaller removes drill service and timer"
 
 # ------------------------------------------------------------------------------
 # Summary

@@ -1,0 +1,25 @@
+[Unit]
+Description=Atlas Daily Restore Drill (restore newest backups into throwaway containers and verify row counts)
+Documentation=https://github.com/ignatius22/atlas
+After=network-online.target docker.service atlas-backup.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/atlas
+EnvironmentFile=-/opt/atlas/.env
+ExecStart=/opt/atlas/scripts/drill.sh --all
+# Drills restore real databases; give large ones time.
+TimeoutStartSec=2h
+Nice=10
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal
+
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+LockPersonality=true

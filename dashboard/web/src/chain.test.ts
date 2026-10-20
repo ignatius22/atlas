@@ -66,7 +66,7 @@ describe("buildChain", () => {
   it("shows a failed restore test as a broken link and downgrades the app", () => {
     const chain = buildChain("myapp", [backup()], { passed: false, at: NOW }, NOW);
     expect(chain.links.find((l) => l.key === "drill")?.state).toBe("broken");
-    expect(chain.health).toBe("at-risk");
+    expect(chain.health).toBe("drill-failed");
   });
 
   it("handles apps with no backups", () => {
@@ -85,5 +85,61 @@ describe("verdict", () => {
       text: "1 of 2 apps would lose data if this server disappeared.",
     });
     expect(verdict([]).tone).toBe("empty");
+  });
+});
+
+describe("recorded restore drills", () => {
+  const drill = (over: Partial<NonNullable<Backup["drill"]>> = {}) => ({
+    passed: true,
+    checked_at: NOW / 1000 - 3600,
+    reason: "",
+    tables_verified: 5,
+    rows_found: 1334,
+    ...over,
+  });
+
+  it("uses the newest recorded drill and shows what it verified", () => {
+    const chain = buildChain(
+      "myapp",
+      [backup({ drill: drill() }), backup({ filename: "old.sql.gz", modified_epoch: hoursAgo(30), drill: drill({ passed: false, checked_at: NOW / 1000 - 90000 }) })],
+      undefined,
+      NOW,
+    );
+    const link = chain.links.find((l) => l.key === "drill")!;
+    expect(link.state).toBe("ok");
+    expect(link.detail).toContain("5 tables, 1,334 rows verified");
+    expect(chain.health).toBe("recoverable");
+  });
+
+  it("marks proof older than two days as stale", () => {
+    const chain = buildChain("myapp", [backup({ drill: drill({ checked_at: NOW / 1000 - 3 * 86400 }) })], undefined, NOW);
+    expect(chain.links.find((l) => l.key === "drill")?.state).toBe("warn");
+  });
+
+  it("downgrades the app and explains why when the last drill failed", () => {
+    const chain = buildChain(
+      "myapp",
+      [backup({ drill: drill({ passed: false, reason: "public.users: expected 1,300, found 1,234" }) })],
+      undefined,
+      NOW,
+    );
+    expect(chain.health).toBe("drill-failed");
+    expect(chain.summary).toContain("public.users");
+    expect(verdict([chain]).tone).toBe("bad");
+    expect(verdict([chain, buildChain("b", [backup()], undefined, NOW)]).text).toBe(
+      "1 of 2 apps failed its last restore drill.",
+    );
+  });
+
+  it("says whether the daily drill is scheduled when nothing has been tested", () => {
+    const on = buildChain("myapp", [backup()], undefined, NOW, { drillsScheduled: true });
+    const off = buildChain("myapp", [backup()], undefined, NOW, { drillsScheduled: false });
+    expect(on.links.find((l) => l.key === "drill")?.detail).toContain("03:30");
+    expect(off.links.find((l) => l.key === "drill")?.detail).toContain("off");
+  });
+
+  it("treats a page-run drill and its recorded result as the same run", () => {
+    const chain = buildChain("myapp", [backup({ drill: drill({ checked_at: NOW / 1000 - 10 }) })], { passed: true, at: NOW }, NOW);
+    expect(chain.links.find((l) => l.key === "drill")?.detail).toContain("rows verified");
   });
 });
