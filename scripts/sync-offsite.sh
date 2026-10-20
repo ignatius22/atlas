@@ -30,7 +30,7 @@ Usage:
   $(basename "$0") [options]
 
 Options:
-  -a, --app=APP_NAME      Application identifier to sync (e.g. --app=catalogflow)
+  -a, --app=APP_NAME      Application identifier to sync (e.g. --app=myapp)
   --all                   Sync all registered applications with off-site sync enabled
   -f, --file=PATH         Explicit local backup file to encrypt and sync
   -d, --dry-run           Simulate encryption and sync without uploading
@@ -45,9 +45,9 @@ Environment Variables:
   ATLAS_S3_SECRET_KEY     Storage Secret Access Key
 
 Examples:
-  $(basename "$0") --app=sand2keys
+  $(basename "$0") --app=myapp
   $(basename "$0") --all
-  $(basename "$0") --app=wdni --dry-run
+  $(basename "$0") --app=shop --dry-run
 EOF
 }
 
