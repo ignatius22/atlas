@@ -24,6 +24,7 @@ All notable changes to Atlas will be documented in this file.
 - `infra/nginx/production/`: live nginx configs for our own sites. They were never read from the repo (the server uses its own copies in `/etc/nginx`). Generic `nginx.conf`, snippets and the app template remain.
 
 ### Fixed
+- `backup.sh` and `sync-offsite.sh` used lock directories in `/tmp`. A crash, `kill -9` or OOM left the directory behind and silently blocked every later backup or sync. They now use kernel locks (`flock`) on `/run/atlas/*.lock`, which the kernel releases when the process dies, as the README always described. Leftover `/tmp/atlas_*.lock.d` directories are ignored.
 - Timers no longer declare `Requires=` on their service, which made every timer start or restart (including each deploy) run an extra backup or drill immediately.
 - `atlas-backup.service` ran offsite sync only if every app's backup succeeded, so one stopped container blocked all apps from reaching offsite storage. Sync now always runs, and the service still reports failure.
 - Backup manifests detect truncated dumps (a COPY block without its terminator) and fail the backup.

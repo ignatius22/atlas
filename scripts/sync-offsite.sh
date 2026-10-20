@@ -100,16 +100,11 @@ done
 # Load environment configuration if available
 load_atlas_env
 
-# Global Lock to prevent concurrent sync collisions
-LOCK_DIR="/tmp/atlas_sync_offsite.lock.d"
-if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
-  log_error "Another off-site sync process is currently running. Exiting."
+# One sync at a time (kernel lock: released automatically if this process dies)
+if ! acquire_atlas_lock sync; then
+  log_error "Another off-site sync process is currently running (lock: ${ATLAS_LOCK_FILE}). Exiting."
   exit 1
 fi
-cleanup_lock() {
-  rm -rf "${LOCK_DIR}" 2>/dev/null || true
-}
-trap cleanup_lock EXIT
 
 # ------------------------------------------------------------------------------
 # Sync a Single Specific Backup File to Cloud Storage
