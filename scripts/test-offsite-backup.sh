@@ -16,7 +16,11 @@ ATLAS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=scripts/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
 
-APP_TARGET="${1:-sand2keys}"
+APP_TARGET="${1:-}"
+if [ -z "${APP_TARGET}" ]; then
+  echo "Usage: $(basename "$0") --app=APP_NAME" >&2
+  exit 2
+fi
 if [[ "${APP_TARGET}" == --app=* ]]; then
   APP_TARGET="${APP_TARGET#*=}"
 fi

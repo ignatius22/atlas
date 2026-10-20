@@ -28,7 +28,7 @@ Usage:
   $(basename "$0") [options]
 
 Options:
-  -a, --app=APP_NAME       Application identifier to restore (e.g. --app=sand2keys)
+  -a, --app=APP_NAME       Application identifier to restore (e.g. --app=myapp)
   -f, --file=FILENAME      Remote file name or path to restore (Default: latest available)
   -k, --key-file=PATH      Path to age private key file for decryption
   --target=TARGET          Target environment: 'test' (default) or 'production'
@@ -41,9 +41,9 @@ Environment Variables:
   ATLAS_OFFSITE_PROVIDER   Remote provider: 'rclone', 's3', 'local-mock'
 
 Examples:
-  $(basename "$0") --app=sand2keys --list
-  $(basename "$0") --app=sand2keys --key-file=/path/to/key.txt
-  ATLAS_AGE_IDENTITY="AGE-SECRET-KEY-1..." $(basename "$0") --app=wdni
+  $(basename "$0") --app=myapp --list
+  $(basename "$0") --app=myapp --key-file=/path/to/key.txt
+  ATLAS_AGE_IDENTITY="AGE-SECRET-KEY-1..." $(basename "$0") --app=shop
 EOF
 }
 
