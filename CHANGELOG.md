@@ -4,7 +4,11 @@ All notable changes to Atlas will be documented in this file.
 
 ## [Unreleased]
 ### Added
-- `atlas discover [--write]`: proposes `apps.yml` entries from running containers, grouped by Compose project (works with Coolify and Dokploy). Detects PostgreSQL, MySQL and MariaDB containers with database name and user, and upload volumes and folders on the app's other containers, skipping database data volumes, caches and the Docker socket. Never reads passwords; `--write` inserts new apps inside the `apps:` block, keeps comments, and saves a backup copy.
+- One-line installer: `curl -fsSL https://raw.githubusercontent.com/ignatius22/atlas/master/get.sh | sudo bash`. Installs to `/opt/atlas`, discovers the apps in Docker, takes the first backup, runs the first restore drill, and enables the timers and dashboard. Writes a fresh `.env` (mode 600) with a generated dashboard token; creates the age keypair interactively and keeps only the public key (`--age-recipient` for unattended installs). Re-running upgrades in place and keeps your settings.
+- MongoDB support (`database.type: mongodb`): backups with `mongodump --archive`, document counts per collection read from the archive, truncated archives rejected, restore drills on the production image, and production restore with `mongorestore --drop`. Credentials are passed in a private config file, never on a command line.
+- `atlas config validate` checks `apps.yml` against the fields Atlas reads: errors for invalid names, missing containers, wrong types; warnings for keys Atlas ignores.
+- `atlas status` shows every app's newest backup, offsite copy and last drill, with any problems.
+- `atlas discover [--write]`: proposes `apps.yml` entries from running containers, grouped by Compose project (works with Coolify and Dokploy). Detects PostgreSQL, MySQL, MariaDB and MongoDB containers with database name and user, and upload volumes and folders on the app's other containers, skipping database data volumes, caches and the Docker socket. Never reads passwords; `--write` inserts new apps inside the `apps:` block, keeps comments, and saves a backup copy.
 - External watchdog (heartbeat). After every backup and drill run, Atlas sends a status report (per app: newest backup age, offsite confirmation, last drill; no data or keys) to `ATLAS_HEARTBEAT_URL`. Problems go to `<URL>/fail` (healthchecks.io convention). Pointed at a dead-man's-switch service, this catches a server or timer that stops running, which the server cannot report itself. Optional HMAC signature (`ATLAS_HEARTBEAT_SECRET`). `atlas heartbeat status|send`. The dashboard shows whether it is set up.
 - MySQL and MariaDB support (`database.type: mysql` or `mariadb`). Dumps use `--single-transaction` with routines, triggers and events, and read passwords from the container's own environment. The manifest counts rows per table from the dump's INSERT statements (single-line MySQL and multi-line MariaDB formats) and rejects dumps missing the `-- Dump completed` footer. Restore drills run on the production container's image and verify every table; production restores are supported.
 - Test-restore containers are checked for readiness over TCP, so a database's temporary init server is never mistaken for the real one.
@@ -19,6 +23,8 @@ All notable changes to Atlas will be documented in this file.
 - `bin/atlas` no longer passes arguments through `eval`; app names containing shell syntax (for example `$(...)`) could previously execute commands.
 
 ### Changed
+- Documentation rewritten and consolidated: README, `docs/USER_GUIDE.md`, `RECOVERY.md`, `TROUBLESHOOTING.md`, `SECURITY.md`, `docs/DEPLOYMENT.md`, `CONTRIBUTING.md`. Removed guides that duplicated or contradicted them, and internal audit notes. The architecture diagram is now Mermaid.
+- `config/apps.example.yml` shows only fields Atlas reads.
 - Dashboard rebuilt from scratch in React + TypeScript (`dashboard/web`, built to `dashboard/dist`). It shows each app's chain of custody (dumped, checksummed, encrypted, offsite-confirmed, restore-tested) and a plain-language recovery verdict. The Bootstrap page and the unused Ecme template are removed.
 - `/api/backups` now reports `synced` (the `.synced` durability marker) and `modified_epoch` for each backup.
 - CLI version is read from the new `VERSION` file (previously hardcoded as 1.0.0).
@@ -31,6 +37,11 @@ All notable changes to Atlas will be documented in this file.
 - `infra/nginx/production/`: live nginx configs for our own sites. They were never read from the repo (the server uses its own copies in `/etc/nginx`). Generic `nginx.conf`, snippets and the app template remain.
 
 ### Fixed
+- `atlas config validate` never worked (it called a missing function, then a parser command that did not exist), and `atlas status` failed the same way.
+- `scripts/uninstall.sh --help` ran the uninstall instead of printing help.
+- The heartbeat reports only apps in `apps.yml`: an old folder in `/var/backups` no longer turns it red, and a configured app that has never been backed up is now flagged. A malformed URL is reported as such instead of as a DNS error.
+- `discover` no longer proposes Redis, queue or Certbot volumes and folders for file backups, and picks the container that owns the data when several use a database image.
+- `install.sh` no longer copies the source checkout's `.git` and `node_modules`, which broke a second install as a non-root user.
 - When `pg_dump` or `mysqldump`/`mariadb-dump` fails, `backup.sh` now reports the tool's own error (for example `database "x" does not exist`) instead of only "decompressed SQL stream is empty".
 - `atlas-backup.service` wrote `exit $rc`, which systemd expands itself (to empty) before bash runs, so a failed backup followed by a successful sync exited 0 and systemd recorded success. Shell variables in unit files are now written `$$rc`, with a test that keeps them escaped.
 - Dashboard reported every database container without a Docker healthcheck as "not found / stopped" on newer Docker versions (Go template error on `.State.Health`). It now reads `docker inspect` JSON.

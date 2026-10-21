@@ -26,9 +26,9 @@ Usage:
 
 Commands:
   init                     Initialize Atlas configuration and Age keypair
-  config validate          Validate atlas.yml syntax and security rules
+  config validate [file]   Validate config/apps.yml (or the given file)
   doctor                   Run comprehensive infrastructure and security audit
-  status                   Display cluster health, container state, and RPO status
+  status                   Show every app's newest backup, offsite copy and last drill
   version                  Display Atlas version information
   
   backup create [app]      Create atomic local PostgreSQL backup
@@ -113,10 +113,16 @@ case "${CMD}" in
     SUBCMD="${1:-}"
     shift || true
     if [ "${SUBCMD}" = "validate" ]; then
-      CONFIG_FILE="$(get_atlas_config "${1:-}")"
+      CONFIG_FILE="${1:-}"
+      if [ -z "${CONFIG_FILE}" ]; then CONFIG_FILE="$(find_apps_config)" || { log_error "No config/apps.yml found."; exit 1; }; fi
+      if [ ! -f "${CONFIG_FILE}" ]; then log_error "No such file: ${CONFIG_FILE}"; exit 1; fi
       log_info "Validating configuration at ${CONFIG_FILE}..."
-      python3 "${SCRIPTS_DIR}/lib/yaml_parser.py" "${CONFIG_FILE}" validate
-      log_success "Configuration is valid and secure."
+      if python3 -I "${SCRIPTS_DIR}/lib/validate_config.py" "${CONFIG_FILE}"; then
+        log_success "Configuration is valid."
+      else
+        log_error "Configuration has errors (see above)."
+        exit 1
+      fi
     else
       log_error "Unknown config subcommand: ${SUBCMD}. Available: validate"
       exit 1
@@ -128,8 +134,8 @@ case "${CMD}" in
     ;;
 
   status)
-    CONFIG_FILE="$(get_atlas_config "")"
-    python3 "${SCRIPTS_DIR}/lib/yaml_parser.py" "${CONFIG_FILE}" to_json
+    # The same report the watchdog receives: per app, newest backup, offsite, last drill.
+    exec python3 -I "${SCRIPTS_DIR}/lib/heartbeat.py" report --event status
     ;;
 
   backup)

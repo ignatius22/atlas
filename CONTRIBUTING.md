@@ -1,34 +1,39 @@
-# Contributing to Atlas
+# Contributing
 
-Thank you for your interest in contributing to Atlas! Atlas is an open-source project designed to provide production-grade backup automation, client-side encryption, and disaster-recovery verification for Dockerized workloads.
+Thanks for helping. Bug reports with the failing command and its output are as useful as code.
 
----
+## Running the tests
 
-## 🛠️ Development Setup
-
-### Prerequisites
-- Linux or macOS (Ubuntu 22.04 / 24.04 recommended)
-- Docker Engine 24+
-- Python 3.9+ with PyYAML
-- `age` and `rclone` (or `aws-cli`)
-
-### Running the Test Suite
-Before submitting any pull request, verify that all unit and chaos disaster-recovery verification tests pass:
+You need Linux, Docker, Python 3, `age` and `rclone`. The end-to-end suites start real PostgreSQL, MySQL, MariaDB and MongoDB containers and write to `/var/backups`, so run them on a machine or VM you don't mind that on.
 
 ```bash
-chmod +x tests/run-all.sh
-./tests/run-all.sh
+./tests/run-all.sh          # everything (or: make test)
+bash tests/test-drill.sh    # one suite
 ```
 
----
+Suites skip themselves, with a message, when Docker is not available. CI runs everything against PostgreSQL 14, 15 and 16.
 
-## 📋 Contribution Guidelines
+## The dashboard
 
-1. **Keep the Core Lightweight:** Do not add heavy dependencies, frameworks, or cloud-specific lock-ins.
-2. **Prioritize Zero-Trust & Fail-Safe Defaults:** Every backup, encryption, and restore path must validate inputs against strict regular expressions and never leak private cryptographic keys.
-3. **Preserve Compatibility:** Atlas is designed to work seamlessly on vanilla Linux VPS environments.
+The React app lives in `dashboard/web`; its build in `dashboard/dist` is committed so servers never need Node.js. After changing the app:
 
----
+```bash
+cd dashboard/web
+npm ci
+npm test            # vitest
+npm run build       # updates ../dist; commit it with your change
+```
 
-## 🔒 Reporting Security Vulnerabilities
-Please do **not** open public GitHub issues for security vulnerabilities. Review our [Security Policy](SECURITY.md) for confidential disclosure instructions.
+CI fails if `dashboard/dist` is out of date.
+
+## Guidelines
+
+- **Keep it boring.** Bash, the Python standard library (plus the vendored PyYAML) and the tools already on a VPS. No new runtime dependencies without discussion.
+- **Never weaken a guarantee.** No local archive may be deleted before it is confirmed offsite; no private key may be written to the server; no password may reach a command line or a log. A change that touches these needs a test that would catch a regression.
+- **Validate input where it is used.** App names, container names, paths and images are checked against strict patterns; arguments go through arrays, never `eval` or `shell=True`.
+- **Test against the real thing.** New database or storage behaviour gets an end-to-end test with a real container, not only a mock.
+- **Update the docs** in the same pull request when behaviour changes.
+
+## Security issues
+
+Report them privately, as described in [SECURITY.md](SECURITY.md), not in a public issue.
