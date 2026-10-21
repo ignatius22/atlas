@@ -33,7 +33,9 @@ apps:
 
     # Database configuration & automated backup policy
     database:
-      type: "postgres"               # postgres, mysql or mariadb
+      type: "postgres"               # postgres, mysql, mariadb or mongodb
+      # mongodb: every database is dumped unless name is set; the user and
+      # password are read inside the container (MONGO_INITDB_ROOT_* or MONGODB_ROOT_*).
       container: "example_postgres"
       name: "example_db"
       user: "example_user"

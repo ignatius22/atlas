@@ -32,7 +32,7 @@ printf "\n\033[1m=== atlas discover Tests ===\033[0m\n"
 # Pure logic, no Docker needed: with two containers on a database image, the
 # one that owns the data directory is the database.
 if python3 -I - "${DISCOVER}" << 'PY'
-import importlib.util, sys
+import importlib.util, json, sys
 spec = importlib.util.spec_from_file_location("discover", sys.argv[1])
 d = importlib.util.module_from_spec(spec); spec.loader.exec_module(d)
 lbl = {"com.docker.compose.project": "shop"}
@@ -46,11 +46,18 @@ for noisy in ("experimentlab_experimentlab_redisdata", "app_redis_data", "app-va
     assert d.NOISE_VOLUME.search(noisy), noisy
 for kept in ("catalogflow_uploads_data", "catalogflow_renders_data", "app_storage"):
     assert not d.NOISE_VOLUME.search(kept), kept
+assert d.engine_of("mongo:7") == "mongodb" and d.engine_of("bitnami/mongodb:7.0") == "mongodb"
+assert d.engine_of("mongo-express:1") is None, "mongo-express is an admin UI, not a database"
+m = d.propose([{"Name": "/notes_db", "Config": {"Image": "mongo:7", "Labels": {"com.docker.compose.project": "notes"},
+               "Env": ["MONGO_INITDB_ROOT_PASSWORD=do-not-leak"]}, "Mounts": [{"Type": "volume", "Name": "notes_mongo", "Destination": "/data/db"}]}])
+assert m["notes"]["database"] == {"type": "mongodb", "container": "notes_db", "backup": True}, m
+assert "files" not in m["notes"], "the MongoDB data volume is covered by the dump"
+assert "do-not-leak" not in json.dumps(m)
 assert d.NOISE_PATH.search("/var/www/certbot") and d.NOISE_PATH.search("/etc2/letsencrypt/live")
 assert not d.NOISE_PATH.search("/var/www/catalogflow/storage")
 PY
 then
-  pass "Picks the container that owns the database data; skips Redis/queue volumes and certbot folders"
+  pass "Picks the container that owns the database data; skips Redis/queue volumes and certbot folders; finds MongoDB but not mongo-express"
 else
   fail "Database container choice"
 fi

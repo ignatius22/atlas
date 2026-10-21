@@ -37,6 +37,7 @@ run_test_suite "${TEST_DIR}/test-notifications-dashboard.sh" "Notifications & Da
 run_test_suite "${TEST_DIR}/test-drill.sh" "Restore Drill & Manifest Tests"
 run_test_suite "${TEST_DIR}/test-files.sh" "File & Volume Backup Tests"
 run_test_suite "${TEST_DIR}/test-mysql.sh" "MySQL & MariaDB Tests"
+run_test_suite "${TEST_DIR}/test-mongodb.sh" "MongoDB Tests"
 run_test_suite "${TEST_DIR}/test-heartbeat.sh" "Heartbeat Watchdog Tests"
 run_test_suite "${TEST_DIR}/test-discover.sh" "Discover Tests"
 run_test_suite "${TEST_DIR}/test-get.sh" "One-line Installer Tests"
