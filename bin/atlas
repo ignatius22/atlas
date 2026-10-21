@@ -40,6 +40,7 @@ Commands:
   restore files [app]      Restore an app's files and volumes into a new directory (--to=DIR)
   restore drill [app]      Restore newest local backup(s) into a throwaway container and verify row counts (all apps if none given)
   
+  discover [--write]       Find databases and app volumes in running containers and propose apps.yml entries
   heartbeat [status|send]  Show the watchdog report, or send it now to ATLAS_HEARTBEAT_URL
 
   crypto gen-key           Generate a new asymmetric Age X25519 keypair
@@ -162,6 +163,13 @@ case "${CMD}" in
         exit 1
         ;;
     esac
+    ;;
+
+  discover)
+    # Propose (or with --write, add) apps for the databases and volumes running here.
+    # Writes go to ATLAS_CONFIG_FILE or config/apps.yml, never the example file.
+    TARGET_CONFIG="${ATLAS_CONFIG_FILE:-${ATLAS_DIR}/config/apps.yml}"
+    exec python3 -I "${SCRIPTS_DIR}/lib/discover.py" --config "${TARGET_CONFIG}" "$@"
     ;;
 
   heartbeat)
