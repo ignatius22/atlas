@@ -1,126 +1,57 @@
-# ==============================================================================
-# Atlas Production Template — Application Registry Configuration
-# ==============================================================================
-# Copy this file to config/apps.yml to define applications managed by Atlas.
-# Atlas uses this declarative registry to manage deployments, health checks,
-# backups, and Nginx reverse proxy configurations without hardcoded application logic.
-# ==============================================================================
-
-version: "1.0"
+# Atlas app registry. Copy to config/apps.yml, or let `atlas discover --write`
+# fill it in from your running containers. Check it with `atlas config validate`.
+#
+# Each app needs a database, files, or both. Passwords are never stored here:
+# Atlas reads them inside each container from the image's standard variables.
 
 apps:
-  # Example 1: Full-Stack Web Application with PostgreSQL & Redis
+  # A web app with a PostgreSQL database and user uploads
   example-app:
-    name: "Example Full-Stack Web Application"
-    directory: "/var/www/example-app"
+    name: "Example app"
+    directory: "/srv/example-app"             # optional; used by the deploy helpers and doctor
+
+    database:
+      type: "postgres"                 # postgres, mysql, mariadb or mongodb
+      container: "example_db"             # exact container name
+      name: "example"                    # database name (MongoDB: optional, all databases by default)
+      user: "example"
+      backup: true                     # false skips the database
+      retention_days: 14               # local copies; never deleted before they are confirmed offsite
+      # restore_image: "postgres:16"   # drill image; default is the image the container runs
+
+    files:
+      volumes: ["example_uploads"]        # Docker named volumes
+      paths: ["/srv/example-app/storage"]     # host folders
+      exclude: ["cache", "*.log"]      # matched against names and relative paths
+      every_hours: 24                  # minimum hours between files backups
+      retention_days: 7
+
+  # A MySQL app with no files
+  blog:
+    database:
+      type: "mysql"
+      container: "blog_mysql"
+      name: "blog"
+      user: "root"                     # root uses MYSQL_ROOT_PASSWORD, others MYSQL_PASSWORD
+
+  # A static site: only files
+  docs-site:
+    files:
+      paths: ["/var/www/docs-site/public"]
+
+  # Optional fields for the deploy helpers (scripts/deploy.sh, rollback.sh, health-check.sh).
+  # Not needed for backups.
+  example-api:
+    directory: "/srv/example-api"
     compose_file: "docker-compose.yml"
-
-    # Domains routed through Atlas Nginx reverse proxy
-    domains:
-      - "example.com"
-      - "www.example.com"
-
-    # Services monitored for availability and health
     services:
       web:
-        container: "example_web"
-        port: 3000
-        healthcheck: "http://127.0.0.1:3000/health"
-      api:
-        container: "example_api"
-        port: 4000
-        healthcheck: "http://127.0.0.1:4000/api/v1/health"
-
-    # Database configuration & automated backup policy
-    database:
-      type: "postgres"               # postgres, mysql, mariadb or mongodb
-      # mongodb: every database is dumped unless name is set; the user and
-      # password are read inside the container (MONGO_INITDB_ROOT_* or MONGODB_ROOT_*).
-      container: "example_postgres"
-      name: "example_db"
-      user: "example_user"
-      backup: true
-      retention_days: 14
-
-    # Files and Docker volumes (user uploads, generated media, app storage)
-    files:
-      volumes:
-        - "example_uploads"          # Docker named volume
-      paths:
-        - "/var/www/example-app/storage"
-      exclude: ["cache", "*.log"]    # matched against relative paths and file names
-      every_hours: 24                # minimum hours between file backups (default 24)
-      retention_days: 7              # default 7; unconfirmed-offsite archives are never deleted
-
-    # Redis cache configuration
-    redis:
-      container: "example_redis"
-      port: 6379
-      persistence: true
-
-    # Resource constraints per application workload
-    resources:
-      memory_limit: "1024M"
-      cpu_limit: "1.0"
-
-    # Deployment configuration
+        container: "example_api_web"
+        healthcheck: "http://127.0.0.1:4000/health"
     deployment:
       strategy: "compose"
       branch: "main"
       auto_pull: true
-      pre_deploy_hook: ""
-      post_deploy_hook: ""
-
-  # Example 2: Lightweight API Service (Single Container, No Database)
-  example-api:
-    name: "Example Microservice API"
-    directory: "/var/www/example-api"
-    compose_file: "docker-compose.prod.yml"
-
-    domains:
-      - "api.example.com"
-
-    services:
-      api:
-        container: "example_microservice"
-        port: 8080
-        healthcheck: "http://127.0.0.1:8080/healthz"
-
     database:
-      backup: false
-
-    resources:
-      memory_limit: "512M"
-      cpu_limit: "0.5"
-
-    deployment:
-      strategy: "compose"
-      branch: "main"
-      auto_pull: true
-
-  # Example 3: Static Frontend / Single Page Application
-  example-frontend:
-    name: "Example SPA Portal"
-    directory: "/var/www/example-frontend"
-    compose_file: "docker-compose.yml"
-
-    domains:
-      - "app.example.com"
-
-    services:
-      frontend:
-        container: "example_frontend"
-        port: 80
-        healthcheck: "http://127.0.0.1:80/"
-
-    database:
-      backup: false
-
-    resources:
-      memory_limit: "256M"
-      cpu_limit: "0.25"
-
-    deployment:
-      strategy: "compose"
-      branch: "production"
-      auto_pull: true
+      type: "mongodb"
+      container: "example_api_mongo"

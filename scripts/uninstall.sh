@@ -8,7 +8,26 @@ INSTALL_DIR="${ATLAS_INSTALL_DIR:-/opt/atlas}"
 BIN_LINK="${ATLAS_BIN_LINK:-/usr/local/bin/atlas}"
 SYSTEMD_DIR="${ATLAS_SYSTEMD_DIR:-/etc/systemd/system}"
 
-echo "Uninstalling Atlas V1..."
+for arg in "$@"; do
+  case "${arg}" in
+    -h|--help)
+      cat << EOF
+Usage: $(basename "$0")
+
+Stops and removes the Atlas timers, services and the atlas command, then
+asks whether to delete ${INSTALL_DIR}. Backups in /var/backups and your
+offsite bucket are never touched.
+EOF
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: ${arg} (see --help)" >&2
+      exit 2
+      ;;
+  esac
+done
+
+echo "Uninstalling Atlas..."
 
 # Disable and remove systemd timers and services if present
 if [ -f "${SYSTEMD_DIR}/atlas-backup.timer" ] || [ -f "${SYSTEMD_DIR}/atlas-backup.service" ] || [ -f "${SYSTEMD_DIR}/atlas-dashboard.service" ] \
