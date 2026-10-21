@@ -40,6 +40,8 @@ Commands:
   restore files [app]      Restore an app's files and volumes into a new directory (--to=DIR)
   restore drill [app]      Restore newest local backup(s) into a throwaway container and verify row counts (all apps if none given)
   
+  heartbeat [status|send]  Show the watchdog report, or send it now to ATLAS_HEARTBEAT_URL
+
   crypto gen-key           Generate a new asymmetric Age X25519 keypair
 
 Options:
@@ -157,6 +159,19 @@ case "${CMD}" in
       run)  exec "${SCRIPTS_DIR}/restore.sh" ${NORMALIZED_ARGS[@]+"${NORMALIZED_ARGS[@]}"} ;;
       *)
         log_error "Unknown restore subcommand: ${SUBCMD}. Available: test, run, drill, files"
+        exit 1
+        ;;
+    esac
+    ;;
+
+  heartbeat)
+    # .env is already loaded by common.sh, so ATLAS_HEARTBEAT_* apply here too.
+    SUBCMD="${1:-status}"
+    case "${SUBCMD}" in
+      status|report) exec python3 -I "${SCRIPTS_DIR}/lib/heartbeat.py" report --event manual ;;
+      send|test) exec python3 -I "${SCRIPTS_DIR}/lib/heartbeat.py" send --event manual ;;
+      *)
+        log_error "Unknown heartbeat subcommand: ${SUBCMD}. Available: status, send"
         exit 1
         ;;
     esac
