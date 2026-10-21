@@ -259,8 +259,33 @@ backup_single_app() {
         | gzip -9 > "${temp_target}"
       ;;
       
+    mysql|mariadb)
+      log_info "Executing ${db_type} dump from container '${container}'..."
+      if [ -z "${db_name}" ] || [ "${db_name}" = "null" ]; then
+        db_name="$(docker exec "${container}" sh -c 'printf %s "${MARIADB_DATABASE:-${MYSQL_DATABASE:-}}"' 2>/dev/null || true)"
+      fi
+      if [ -z "${db_name}" ]; then
+        log_error "No database name for '${app}'. Set database.name in apps.yml."
+        cleanup_failed_backup
+        return 1
+      fi
+      if [ -z "${db_user}" ] || [ "${db_user}" = "null" ]; then
+        db_user="root"
+      fi
+      # The password is read inside the container from the image's standard
+      # variables, so it never appears on the host command line.
+      # --single-transaction: consistent snapshot of InnoDB tables without locking.
+      docker exec -i "${container}" sh -c '
+        user="$1"; db="$2"
+        if [ "$user" = "root" ]; then pw="${MARIADB_ROOT_PASSWORD:-${MYSQL_ROOT_PASSWORD:-}}"; else pw="${MARIADB_PASSWORD:-${MYSQL_PASSWORD:-}}"; fi
+        if command -v mariadb-dump >/dev/null 2>&1; then dump=mariadb-dump; else dump=mysqldump; fi
+        export MYSQL_PWD="$pw"
+        exec "$dump" -u"$user" --single-transaction --quick --no-tablespaces --routines --triggers --events --hex-blob --default-character-set=utf8mb4 "$db"
+      ' _ "${db_user}" "${db_name}" | gzip -9 > "${temp_target}"
+      ;;
+
     *)
-      log_error "Unsupported database type '${db_type}'. Currently supported: 'postgres'."
+      log_error "Unsupported database type '${db_type}'. Supported: postgres, mysql, mariadb."
       return 1
       ;;
   esac
@@ -296,8 +321,8 @@ backup_single_app() {
   # Check 4: Header verification (Must contain valid PostgreSQL dump markers)
   local sql_header
   sql_header="$( (set +o pipefail; gzip -dc "${temp_target}" 2>/dev/null | head -n 30) || true )"
-  if ! echo "${sql_header}" | grep -qE "(PostgreSQL database dump|SET statement_timeout|CREATE |ALTER |DROP |COPY )"; then
-    log_error "Backup verification failed: Archive does not contain valid PostgreSQL dump headers."
+  if ! echo "${sql_header}" | grep -qE "(PostgreSQL database dump|MySQL dump|MariaDB dump|SET statement_timeout|CREATE |ALTER |DROP |COPY )"; then
+    log_error "Backup verification failed: Archive does not contain valid SQL dump headers."
     cleanup_failed_backup
     return 1
   fi
