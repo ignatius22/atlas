@@ -291,6 +291,10 @@ def get_system_summary():
             "recipient_configured": has_recipient,
             "recipient_masked": masked_recipient
         },
+        "heartbeat": {
+            # Only whether it is set; the URL itself is a secret-ish endpoint.
+            "configured": bool((os.environ.get("ATLAS_HEARTBEAT_URL") or env.get("ATLAS_HEARTBEAT_URL", "")).strip()),
+        },
         "offsite": {
             "provider": detect_offsite_provider(env)[1],
             "bucket": bucket,
