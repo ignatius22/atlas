@@ -1,4 +1,4 @@
-import type { ActionName, ActionResult, BackupsByApp, OffsiteListing, SystemStatus } from "./types";
+import type { ActionName, ActionResult, BackupsByApp, FilesByApp, OffsiteListing, SystemStatus } from "./types";
 
 const TOKEN_KEY = "atlas.dashboardToken";
 
@@ -18,6 +18,8 @@ export const api = {
   status: () => getJson<SystemStatus>("/api/status"),
   backups: () => getJson<BackupsByApp>("/api/backups"),
   offsite: () => getJson<OffsiteListing>("/api/offsite"),
+  // Older servers have no /api/files; treat that as "no file backups".
+  files: () => getJson<FilesByApp>("/api/files").catch(() => ({}) as FilesByApp),
 
   async action(action: ActionName, app: string): Promise<ActionResult> {
     const token = getToken();
