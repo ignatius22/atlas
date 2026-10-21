@@ -215,6 +215,12 @@ function Facts({ status }: { status: SystemStatus }) {
         </dd>
       </div>
       <div>
+        <dt>External watchdog</dt>
+        <dd className={status.heartbeat?.configured ? "" : "tone-warn"}>
+          {status.heartbeat?.configured ? "Reporting after every run" : "Not set up"}
+        </dd>
+      </div>
+      <div>
         <dt>Offsite storage</dt>
         <dd className={status.offsite.configured ? "" : "tone-bad"}>
           {status.offsite.configured ? `${status.offsite.provider}, ${status.offsite.bucket}` : "Not configured"}

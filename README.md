@@ -227,7 +227,16 @@ Each run writes `myapp-files-<timestamp>.tar.gz` plus a manifest (file count, by
 atlas restore files myapp --to=/var/restore/myapp   # extracts into a new directory; never touches live data
 ```
 
-### 5. Enable Native Systemd 6-Hour Persistent Timer
+### 5. Set Up the External Watchdog
+A server cannot report its own death. After every backup and drill run, Atlas sends a status report (no data, no keys) to a dead-man's-switch service, so you are alerted when a run finds a problem **and** when reports stop arriving.
+
+1. Create a check on [healthchecks.io](https://healthchecks.io) (free) or an Uptime Kuma push monitor: period 6 hours, grace 2 hours.
+2. Add its URL to `/opt/atlas/.env`: `ATLAS_HEARTBEAT_URL=https://hc-ping.com/<uuid>`
+3. Send one now: `atlas heartbeat send` (or `atlas heartbeat status` to see the report).
+
+Problems (late backups, nothing confirmed offsite, failed or stale drills, a failing run) go to `<URL>/fail`; override with `ATLAS_HEARTBEAT_FAIL_URL`. `ATLAS_HEARTBEAT_SECRET` adds an HMAC signature.
+
+### 6. Enable Native Systemd 6-Hour Persistent Timer
 Systemd is the recommended production scheduler for Atlas. The installer sets up the unit files automatically. To enable and verify the scheduler:
 
 ```bash

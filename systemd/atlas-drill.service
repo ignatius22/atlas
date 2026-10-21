@@ -10,7 +10,8 @@ User=root
 Group=root
 WorkingDirectory=/opt/atlas
 EnvironmentFile=-/opt/atlas/.env
-ExecStart=/opt/atlas/scripts/drill.sh --all
+# systemd expands $VAR itself, so the shell variable is written $$rc.
+ExecStart=/bin/bash -c 'rc=0; /opt/atlas/scripts/drill.sh --all || rc=$$?; python3 /opt/atlas/scripts/lib/heartbeat.py send --event drill --exit-code $$rc; exit $$rc'
 # Drills restore real databases; give large ones time.
 TimeoutStartSec=2h
 Nice=10
