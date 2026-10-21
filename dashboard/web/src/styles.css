@@ -301,6 +301,24 @@ button.link {
 
 /* ---------- Chain of custody ---------- */
 
+.chain-group + .chain-group {
+  border-top: 1px solid var(--line);
+  padding-top: 1.1rem;
+}
+
+.chain-title {
+  margin: 0 0 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.chain-sources {
+  margin-top: 0.75rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
 .chain {
   --node: 14px;
   list-style: none;

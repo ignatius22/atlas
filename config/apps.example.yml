@@ -40,6 +40,16 @@ apps:
       backup: true
       retention_days: 14
 
+    # Files and Docker volumes (user uploads, generated media, app storage)
+    files:
+      volumes:
+        - "example_uploads"          # Docker named volume
+      paths:
+        - "/var/www/example-app/storage"
+      exclude: ["cache", "*.log"]    # matched against relative paths and file names
+      every_hours: 24                # minimum hours between file backups (default 24)
+      retention_days: 7              # default 7; unconfirmed-offsite archives are never deleted
+
     # Redis cache configuration
     redis:
       container: "example_redis"

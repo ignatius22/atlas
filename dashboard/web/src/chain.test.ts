@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildChain, verdict } from "./chain";
+import { buildChain, verdict, worstChain } from "./chain";
 import type { Backup } from "./types";
 
 const NOW = Date.parse("2026-10-20T12:00:00Z");
@@ -141,5 +141,44 @@ describe("recorded restore drills", () => {
   it("treats a page-run drill and its recorded result as the same run", () => {
     const chain = buildChain("myapp", [backup({ drill: drill({ checked_at: NOW / 1000 - 10 }) })], { passed: true, at: NOW }, NOW);
     expect(chain.links.find((l) => l.key === "drill")?.detail).toContain("rows verified");
+  });
+});
+
+describe("files chains", () => {
+  const archive = (over: Partial<Backup> = {}) =>
+    backup({
+      filename: "myapp-files-20261020T000000Z.tar.gz",
+      contents: null,
+      files: { files: 1204, bytes: 3_400_000, sources: [{ kind: "volume", name: "uploads", files: 1204 }] },
+      ...over,
+    });
+
+  it("allows a daily schedule before calling files late", () => {
+    const chain = buildChain("myapp", [archive({ modified_epoch: hoursAgo(20) })], undefined, NOW, {
+      kind: "files",
+      lateAfterHours: 26,
+    });
+    expect(chain.kind).toBe("files");
+    expect(chain.health).toBe("recoverable");
+    expect(chain.links[0].label).toBe("Archived");
+    expect(chain.links[0].detail).toContain("1,204 files");
+  });
+
+  it("shows verified file counts from a files drill", () => {
+    const chain = buildChain(
+      "myapp",
+      [archive({ drill: { passed: true, checked_at: NOW / 1000 - 60, reason: "", files_found: 1204 } })],
+      undefined,
+      NOW,
+      { kind: "files", lateAfterHours: 26 },
+    );
+    expect(chain.links.find((l) => l.key === "drill")?.detail).toContain("1,204 files verified");
+  });
+
+  it("rates an app by the weaker of its database and files", () => {
+    const db = buildChain("myapp", [backup()], undefined, NOW);
+    const files = buildChain("myapp", [archive({ synced: false })], undefined, NOW, { kind: "files", lateAfterHours: 26 });
+    expect(worstChain([db, files]).kind).toBe("files");
+    expect(worstChain([db, files]).health).toBe("unprotected");
   });
 });

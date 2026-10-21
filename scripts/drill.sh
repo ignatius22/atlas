@@ -86,6 +86,58 @@ if [ -z "${apps}" ]; then
   exit 1
 fi
 
+# Read the newest files archive end to end and compare every file's size and
+# checksum with what was recorded at backup time. Records <archive>.drill.json.
+drill_files() {
+  local app="$1"
+  local archive
+  archive="$(find "/var/backups/${app}" -maxdepth 1 -type f -name "${app}-files-*.tar.gz" | sort -r | head -n 1)"
+  local started
+  started="$(date +%s)"
+  local work
+  work="$(mktemp -d)"
+  local passed=false reason=""
+
+  if [ ! -f "${archive}.manifest.json" ]; then
+    reason="No manifest recorded for this files archive."
+  elif [ -f "${archive}.sha256" ] && [ "$(cut -d' ' -f1 < "${archive}.sha256")" != "$(sha256sum "${archive}" | cut -d' ' -f1)" ]; then
+    reason="Archive checksum does not match; the file was modified or corrupted."
+  elif python3 -I "${SCRIPT_DIR}/lib/files_backup.py" verify "${archive}" "${archive}.manifest.json" > "${work}/verify.json" 2> "${work}/err"; then
+    passed=true
+  else
+    if [ -s "${work}/verify.json" ]; then
+      reason="Restored files do not match the backup: $(python3 -I "${SCRIPT_DIR}/lib/files_backup.py" summary "${work}/verify.json")"
+    else
+      reason="Archive could not be read: $(head -c 200 "${work}/err")"
+    fi
+  fi
+
+  python3 -I - "${archive}.drill.json" "${app}" "$(basename "${archive}")" "${passed}" "${reason}" "${started}" "${work}/verify.json" << 'PYEOF' || log_warn "Could not record files drill result."
+import json, os, sys, time
+out, app, backup, passed, reason, started, verify_path = sys.argv[1:8]
+result = {"format": 1, "kind": "files", "app": app, "backup": backup, "passed": passed == "true",
+          "checked_at": int(time.time()), "duration_s": int(time.time()) - int(started), "reason": reason}
+if os.path.exists(verify_path) and os.path.getsize(verify_path):
+    try:
+        result.update(json.load(open(verify_path)))
+    except ValueError:
+        pass
+tmp = f"{out}.tmp.{os.getpid()}"
+with open(tmp, "w") as fh:
+    json.dump(result, fh, indent=2)
+os.replace(tmp, out)
+PYEOF
+  rm -rf "${work}"
+
+  if [ "${passed}" = "true" ]; then
+    log_success "FILES DRILL PASSED for '${app}': $(python3 -I "${SCRIPT_DIR}/lib/files_backup.py" summary "${archive}.drill.json" 2>/dev/null || echo verified)."
+    return 0
+  fi
+  log_error "Files drill FAILED for '${app}': ${reason}"
+  send_atlas_notification "FAILURE" "Atlas Files Drill Failed" "Application: \`${app}\`\nArchive: \`$(basename "${archive}")\`\nError: ${reason}\nHost: \`$(hostname)\`" || true
+  return 1
+}
+
 passed=0
 failed=0
 skipped=0
@@ -97,21 +149,37 @@ for app in ${apps}; do
     skipped=$((skipped + 1))
     continue
   fi
-  if ! compgen -G "/var/backups/${app}/${app}-*.sql.gz" > /dev/null; then
+  has_db=false
+  has_files=false
+  compgen -G "/var/backups/${app}/${app}-*.sql.gz" > /dev/null && has_db=true
+  compgen -G "/var/backups/${app}/${app}-files-*.tar.gz" > /dev/null && has_files=true
+  if [ "${has_db}" = "false" ] && [ "${has_files}" = "false" ]; then
     log_warn "Skipping '${app}': no local backups to test yet."
     skipped=$((skipped + 1))
     continue
   fi
 
-  log_info "=== Restore drill: ${app} ==="
-  restore_args=("--app=${app}" "--target=test")
-  if [ -n "${CUSTOM_CONFIG}" ]; then restore_args+=("--config=${CUSTOM_CONFIG}"); fi
-  # restore.sh records the result and sends the failure alert itself.
-  if "${SCRIPT_DIR}/restore.sh" "${restore_args[@]}"; then
-    passed=$((passed + 1))
-  else
-    failed=$((failed + 1))
-    failed_apps+=("${app}")
+  if [ "${has_db}" = "true" ]; then
+    log_info "=== Restore drill: ${app} (database) ==="
+    restore_args=("--app=${app}" "--target=test")
+    if [ -n "${CUSTOM_CONFIG}" ]; then restore_args+=("--config=${CUSTOM_CONFIG}"); fi
+    # restore.sh records the result and sends the failure alert itself.
+    if "${SCRIPT_DIR}/restore.sh" "${restore_args[@]}"; then
+      passed=$((passed + 1))
+    else
+      failed=$((failed + 1))
+      failed_apps+=("${app}")
+    fi
+  fi
+
+  if [ "${has_files}" = "true" ]; then
+    log_info "=== Restore drill: ${app} (files) ==="
+    if drill_files "${app}"; then
+      passed=$((passed + 1))
+    else
+      failed=$((failed + 1))
+      failed_apps+=("${app} (files)")
+    fi
   fi
 done
 

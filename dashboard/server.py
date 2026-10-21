@@ -89,23 +89,36 @@ def validate_app_name(app_val, allow_all=True):
         return False, None, "Invalid application identifier format. Only alphanumeric, dashes, and underscores allowed."
     return True, app_str, ""
 
-def get_registered_apps():
-    """Discover registered applications and their database containers."""
-    apps = {}
+def load_apps_config():
+    """Return the apps mapping from config/apps.yml (or the example), or {}."""
     apps_yml = BASE_DIR / "config" / "apps.yml"
     if not apps_yml.exists():
         apps_yml = BASE_DIR / "config" / "apps.example.yml"
-    if apps_yml.exists():
-        try:
-            import yaml
-            with open(apps_yml, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
-                if isinstance(data, dict) and "apps" in data:
-                    for app_id, app_info in data["apps"].items():
-                        container = app_info.get("database", {}).get("container", f"{app_id}_postgres")
-                        apps[app_id] = container
-        except Exception:
-            pass
+    if not apps_yml.exists():
+        return {}
+    vendor = BASE_DIR / "scripts" / "lib" / "vendor"
+    if vendor.is_dir() and str(vendor) not in sys.path:
+        sys.path.append(str(vendor))
+    try:
+        import yaml
+        with open(apps_yml, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        apps = data.get("apps") if isinstance(data, dict) else None
+        return apps if isinstance(apps, dict) else {}
+    except Exception:
+        return {}
+
+
+def get_registered_apps():
+    """Discover registered applications and their database containers (None when an app has no database)."""
+    apps = {}
+    for app_id, app_info in load_apps_config().items():
+        info = app_info if isinstance(app_info, dict) else {}
+        db = info.get("database")
+        if isinstance(db, dict):
+            apps[app_id] = db.get("container", f"{app_id}_postgres")
+        else:
+            apps[app_id] = None
 
     backup_base = Path("/var/backups")
     if backup_base.exists():
@@ -113,7 +126,8 @@ def get_registered_apps():
             for p in backup_base.iterdir():
                 if p.is_dir() and p.name not in {"lost+found", "offsite-mock"}:
                     if p.name not in apps:
-                        apps[p.name] = f"{p.name}_postgres"
+                        has_db_backups = any(p.glob(f"{p.name}-*.sql.gz"))
+                        apps[p.name] = f"{p.name}_postgres" if has_db_backups else None
         except Exception:
             pass
 
@@ -207,20 +221,29 @@ def get_system_summary():
     # Containers Status
     containers = []
     app_map = get_registered_apps()
-    target_containers = list(app_map.values())
-    fmt = '{"id":"{{.Id}}","status":"{{.State.Status}}","started":"{{.State.StartedAt}}","health":"{{if .State.Health}}{{.State.Health.Status}}{{else}}n/a{{end}}"}'
+    target_containers = [c for c in app_map.values() if c]
     for name in target_containers:
-        code, out, _ = run_cmd(["docker", "inspect", name, "--format", fmt], timeout=10)
-        if code == 0 and out.strip():
-            try:
-                data = json.loads(out.strip())
-                data["name"] = name
-                data["id_short"] = data["id"][:12] if "id" in data and data["id"] else ""
-                containers.append(data)
-            except Exception:
-                containers.append({"name": name, "status": "unknown", "health": "unknown", "started": ""})
-        else:
+        # Read Docker's own JSON rather than a Go template: templates fail on
+        # newer Docker when a container has no healthcheck (State.Health is absent).
+        code, out, _ = run_cmd(["docker", "inspect", "--type", "container", name], timeout=10)
+        if code != 0 or not out.strip():
             containers.append({"name": name, "status": "not found / stopped", "health": "down", "started": ""})
+            continue
+        try:
+            info = json.loads(out)[0]
+            state = info.get("State") or {}
+            health = (state.get("Health") or {}).get("Status") or "n/a"
+            cid = info.get("Id") or ""
+            containers.append({
+                "name": name,
+                "id": cid,
+                "id_short": cid[:12],
+                "status": state.get("Status") or "unknown",
+                "started": state.get("StartedAt") or "",
+                "health": health,
+            })
+        except Exception:
+            containers.append({"name": name, "status": "unknown", "health": "unknown", "started": ""})
 
     key_count = count_private_keys_on_host()
 
@@ -260,6 +283,8 @@ def get_system_summary():
             "percent": disk_pct
         },
         "containers": containers,
+        # Which registered apps have a database to back up (files-only apps do not)
+        "apps": {name: {"database": container is not None} for name, container in app_map.items()},
         "security": {
             "private_keys_on_vps": key_count,
             "zero_knowledge_intact": (key_count == 0),
@@ -360,6 +385,84 @@ def get_backups_list():
         result[app] = backups
     return result
 
+def _read_json(path):
+    try:
+        return json.loads(Path(path).read_text())
+    except Exception:
+        return None
+
+
+def get_files_list():
+    """Per app: whether files backups are configured, and the files archives on disk."""
+    config = load_apps_config()
+    apps = get_registered_apps()
+    result = {}
+    for app in apps:
+        info = config.get(app) if isinstance(config.get(app), dict) else {}
+        files_cfg = info.get("files") if isinstance(info.get("files"), dict) else None
+        app_dir = Path(f"/var/backups/{app}")
+        archives = []
+        if app_dir.exists():
+            for f in sorted(app_dir.glob(f"{app}-files-*.tar.gz"), reverse=True):
+                st = f.stat()
+                sha = ""
+                sha_file = Path(f"{f}.sha256")
+                if sha_file.exists():
+                    try:
+                        sha = sha_file.read_text().split()[0]
+                    except Exception:
+                        pass
+                manifest = _read_json(f"{f}.manifest.json") or {}
+                drill_raw = _read_json(f"{f}.drill.json")
+                drill = None
+                if drill_raw is not None:
+                    drill = {
+                        "passed": bool(drill_raw.get("passed")),
+                        "checked_at": drill_raw.get("checked_at"),
+                        "reason": drill_raw.get("reason") or "",
+                        "files_found": drill_raw.get("files_found"),
+                        "bytes_found": drill_raw.get("bytes_found"),
+                    }
+                archives.append({
+                    "filename": f.name,
+                    "size_bytes": st.st_size,
+                    "size_human": human_size(st.st_size),
+                    "modified": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(st.st_mtime)),
+                    "modified_epoch": int(st.st_mtime),
+                    "sha256": sha,
+                    "sha256_short": sha[:12] + "..." if sha else "",
+                    "has_age": Path(f"{f}.age").exists(),
+                    "age_size_bytes": 0,
+                    "synced": Path(f"{f}.synced").exists(),
+                    "files": {
+                        "files": manifest.get("files"),
+                        "bytes": manifest.get("bytes"),
+                        "sources": [
+                            {"kind": src.get("kind"), "name": src.get("name"), "files": src.get("files")}
+                            for src in manifest.get("sources", []) if isinstance(src, dict)
+                        ],
+                    } if manifest else None,
+                    "drill": drill,
+                    "metadata": {},
+                })
+        if files_cfg is not None or archives:
+            every = files_cfg.get("every_hours") if files_cfg else None
+            result[app] = {
+                "configured": files_cfg is not None,
+                "every_hours": every if isinstance(every, int) and every > 0 else 24,
+                "archives": archives,
+            }
+    return result
+
+
+def human_size(n):
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n} B"
+
+
 def get_remote_objects():
     """Query the off-site S3-compatible bucket via rclone without shell interpolation."""
     env = load_env()
@@ -437,6 +540,8 @@ class AtlasDashboardHandler(SimpleHTTPRequestHandler):
             self.send_json(get_system_summary())
         elif parsed.path == "/api/backups":
             self.send_json(get_backups_list())
+        elif parsed.path == "/api/files":
+            self.send_json(get_files_list())
         elif parsed.path == "/api/offsite":
             self.send_json(get_remote_objects())
         elif parsed.path == "/api/preflight":

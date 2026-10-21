@@ -211,8 +211,8 @@ EOF_META
   local year_month
   local backup_basename
   backup_basename="$(basename "${backup_file}")"
-  if [[ "${backup_basename}" =~ ^${app}-([0-9]{4})([0-9]{2})[0-9]{2}T[0-9]{6}Z\.sql\.gz$ ]]; then
-    year_month="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+  if [[ "${backup_basename}" =~ ^${app}-(files-)?([0-9]{4})([0-9]{2})[0-9]{2}T[0-9]{6}Z\.(sql|tar)\.gz$ ]]; then
+    year_month="${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
   else
     year_month="$(date -u +"%Y/%m")"
     log_warn "Could not derive archive month from '${backup_basename}'; using current UTC month (${year_month})."
@@ -437,14 +437,15 @@ sync_app_backup() {
     return 1
   fi
   
-  # Backlog discovery: find all .sql.gz archives that lack a .synced marker
+  # Backlog discovery: find all database (.sql.gz) and files (.tar.gz) archives
+  # that lack a .synced marker
   # Sorted in chronological order (oldest first) so backlogs drain in sequence
   local unsynced_backups=()
   while IFS= read -r -d '' bfile; do
     if [ ! -f "${bfile}.synced" ]; then
       unsynced_backups+=("${bfile}")
     fi
-  done < <(find "${app_backup_dir}" -maxdepth 1 -type f -name "${app}-*.sql.gz" -print0 2>/dev/null | sort -z || true)
+  done < <(find "${app_backup_dir}" -maxdepth 1 -type f \( -name "${app}-*.sql.gz" -o -name "${app}-files-*.tar.gz" \) -print0 2>/dev/null | sort -z || true)
   
   if [ "${#unsynced_backups[@]}" -eq 0 ]; then
     log_info "All local backups for '${app}' are verified off-site (.synced). Nothing to sync."
