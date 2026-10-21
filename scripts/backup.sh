@@ -21,6 +21,7 @@ fi
 APP_TARGET="${APP:-}"
 ALL_APPS=false
 DRY_RUN=false
+FILES_MODE="auto"   # auto (respect files.every_hours), force, skip, only
 CUSTOM_CONFIG=""
 
 print_usage() {
@@ -35,6 +36,9 @@ Options:
   --all                   Back up all registered applications with backup enabled
   -c, --config=PATH       Path to custom apps.yml configuration file
   -d, --dry-run           Simulate backup steps without dumping data
+  --files-now             Back up files and volumes now, ignoring files.every_hours
+  --skip-files            Back up databases only
+  --files-only            Back up files and volumes only (implies --files-now)
   -h, --help              Show this help message
 
 Environment Variables:
@@ -76,6 +80,18 @@ while [ $# -gt 0 ]; do
       ;;
     -d|--dry-run)
       DRY_RUN=true
+      shift
+      ;;
+    --files-now)
+      FILES_MODE="force"
+      shift
+      ;;
+    --skip-files)
+      FILES_MODE="skip"
+      shift
+      ;;
+    --files-only)
+      FILES_MODE="only"
       shift
       ;;
     -h|--help)
@@ -135,6 +151,11 @@ backup_single_app() {
     return 1
   fi
   
+  if [ -z "$(get_app_property "${app}" "database")" ]; then
+    log_info "No database configured for '${app}'. Skipping database backup."
+    return 0
+  fi
+
   local db_enabled
   db_enabled="$(get_app_property "${app}" "database.backup")"
   if [ "${db_enabled}" = "false" ]; then
@@ -338,6 +359,118 @@ backup_single_app() {
   return 0
 }
 
+# ------------------------------------------------------------------------------
+# File and volume backups
+# ------------------------------------------------------------------------------
+# apps.<app>.files:
+#   volumes: [myapp_uploads]          Docker named volumes
+#   paths: [/var/www/myapp/storage]   Host directories
+#   exclude: ["*.log", "cache"]       Globs matched against relative paths and names
+#   every_hours: 24                   Minimum hours between file backups (default 24)
+#   retention_days: 7                 Default 7; never deletes archives not confirmed offsite
+yaml_list() {
+  local app="$1" key="$2" idx
+  for idx in $(query_yaml_keys "$(find_apps_config)" "apps.${app}.${key}"); do
+    get_app_property "${app}" "${key}.${idx}"
+  done
+}
+
+backup_app_files() {
+  local app="$1"
+  if [ -z "$(get_app_property "${app}" "files")" ]; then
+    return 0
+  fi
+
+  local target_dir="${GLOBAL_BACKUP_DIR}/${app}"
+  local every_hours retention
+  every_hours="$(get_app_property "${app}" "files.every_hours")"
+  [[ "${every_hours}" =~ ^[0-9]+$ ]] || every_hours=24
+  retention="$(get_app_property "${app}" "files.retention_days")"
+  [[ "${retention}" =~ ^[0-9]+$ ]] || retention=7
+
+  if [ "${FILES_MODE}" = "auto" ] && [ -d "${target_dir}" ]; then
+    local recent
+    recent="$(find "${target_dir}" -maxdepth 1 -type f -name "${app}-files-*.tar.gz" -mmin "-$((every_hours * 60 - 10))" -print -quit 2>/dev/null || true)"
+    if [ -n "${recent}" ]; then
+      log_info "Files for '${app}' were backed up less than ${every_hours}h ago ($(basename "${recent}")). Skipping."
+      return 0
+    fi
+  fi
+
+  if [ "${DRY_RUN}" = "true" ]; then
+    log_info "[DRY-RUN] Files for '${app}': volumes [$(yaml_list "${app}" "files.volumes" | paste -sd, -)] paths [$(yaml_list "${app}" "files.paths" | paste -sd, -)]"
+    return 0
+  fi
+
+  local args=()
+  local vol mount p ex
+  while IFS= read -r vol; do
+    [ -z "${vol}" ] && continue
+    if ! [[ "${vol}" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]; then
+      log_error "Invalid volume name '${vol}' for '${app}'."
+      return 1
+    fi
+    require_cmd docker
+    mount="$(docker volume inspect --format '{{.Mountpoint}}' "${vol}" 2>/dev/null || true)"
+    if [ -z "${mount}" ] || [ ! -d "${mount}" ]; then
+      log_error "Docker volume '${vol}' for '${app}' was not found on this host."
+      send_atlas_notification "FAILURE" "File Backup Failed" "Application: \`${app}\`\nVolume \`${vol}\` not found on host \`$(hostname)\`." || true
+      return 1
+    fi
+    args+=(--volume "${vol}=${mount}")
+  done < <(yaml_list "${app}" "files.volumes")
+
+  while IFS= read -r p; do
+    [ -z "${p}" ] && continue
+    if [[ "${p}" != /* ]] || [[ "${p}" == *".."* ]]; then
+      log_error "File path for '${app}' must be absolute without '..': ${p}"
+      return 1
+    fi
+    if [ ! -d "${p}" ]; then
+      log_error "Directory '${p}' for '${app}' does not exist."
+      send_atlas_notification "FAILURE" "File Backup Failed" "Application: \`${app}\`\nDirectory \`${p}\` missing on host \`$(hostname)\`." || true
+      return 1
+    fi
+    args+=(--path "${p}")
+  done < <(yaml_list "${app}" "files.paths")
+
+  while IFS= read -r ex; do
+    [ -n "${ex}" ] && args+=(--exclude "${ex}")
+  done < <(yaml_list "${app}" "files.exclude")
+
+  if [ "${#args[@]}" -eq 0 ]; then
+    log_warn "files section for '${app}' lists no volumes or paths. Skipping."
+    return 0
+  fi
+
+  local target_file="${target_dir}/${app}-files-$(filename_timestamp).tar.gz"
+
+  mkdir -p "${target_dir}"
+  log_info "Backing up files for '${app}'..."
+  local summary
+  if ! summary="$(python3 -I "${SCRIPT_DIR}/lib/files_backup.py" create "${target_file}" "${target_file}.manifest.json" "${args[@]}")"; then
+    log_error "File backup failed for '${app}'."
+    rm -f "${target_file}" "${target_file}.manifest.json"
+    send_atlas_notification "FAILURE" "File Backup Failed" "Application: \`${app}\`\nHost: \`$(hostname)\`" || true
+    return 1
+  fi
+  sha256sum "${target_file}" > "${target_file}.sha256"
+  log_success "Files backed up for '${app}': ${summary}"
+  log_info "  Archive: ${target_file}"
+
+  # Retention: same durability gate as database backups.
+  local old_file
+  while IFS= read -r -d '' old_file; do
+    if [ -f "${old_file}.synced" ]; then
+      log_info "Pruning replicated expired files archive: $(basename "${old_file}")"
+      rm -f "${old_file}" "${old_file}.sha256" "${old_file}.age" "${old_file}.age.sha256" "${old_file}.meta.json" "${old_file}.manifest.json" "${old_file}.drill.json" "${old_file}.synced"
+    else
+      log_warn "PRESERVING un-replicated files archive despite retention expiry: $(basename "${old_file}")"
+    fi
+  done < <(find "${target_dir}" -maxdepth 1 -type f -name "${app}-files-*.tar.gz" -mtime "+${retention}" -print0 2>/dev/null || true)
+  return 0
+}
+
 # Main execution logic
 if [ "${ALL_APPS}" = "true" ]; then
   apps_list="$(list_registered_apps)"
@@ -349,7 +482,10 @@ if [ "${ALL_APPS}" = "true" ]; then
   
   failures=0
   for single_app in ${apps_list}; do
-    if ! backup_single_app "${single_app}"; then
+    if [ "${FILES_MODE}" != "only" ] && ! backup_single_app "${single_app}"; then
+      failures=$((failures + 1))
+    fi
+    if [ "${FILES_MODE}" != "skip" ] && ! backup_app_files "${single_app}"; then
       failures=$((failures + 1))
     fi
   done
@@ -371,7 +507,19 @@ if [ -z "${APP_TARGET}" ]; then
   exit 2
 fi
 
-if backup_single_app "${APP_TARGET}"; then
+if ! validate_app_name "${APP_TARGET}"; then
+  exit 1
+fi
+
+single_failed=false
+if [ "${FILES_MODE}" != "only" ] && ! backup_single_app "${APP_TARGET}"; then
+  single_failed=true
+fi
+if [ "${FILES_MODE}" != "skip" ] && ! backup_app_files "${APP_TARGET}"; then
+  single_failed=true
+fi
+
+if [ "${single_failed}" = "false" ]; then
   record_scheduler_run_result "success" || true
 else
   record_scheduler_run_result "failure" || true
