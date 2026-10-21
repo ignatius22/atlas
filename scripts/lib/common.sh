@@ -206,3 +206,29 @@ require_cmd() {
     return 1
   fi
 }
+
+# ------------------------------------------------------------------------------
+# Process locks
+# ------------------------------------------------------------------------------
+# acquire_atlas_lock <name>
+# Takes a non-blocking kernel lock (flock) on <lock dir>/<name>.lock, held until
+# this process and any children holding the descriptor exit. Because the kernel
+# releases it when the process dies (crash, kill -9, OOM, reboot), a lock can
+# never be left behind to block future runs, unlike a lock directory.
+# Lock dir: $ATLAS_LOCK_DIR, else /run/atlas, else /tmp.
+# Returns 1 if another process holds the lock.
+acquire_atlas_lock() {
+  local name="$1"
+  local dir="${ATLAS_LOCK_DIR:-/run/atlas}"
+  if ! mkdir -p "${dir}" 2>/dev/null || [ ! -w "${dir}" ]; then
+    dir="/tmp"
+  fi
+  ATLAS_LOCK_FILE="${dir}/${name}.lock"
+  if ! command -v flock >/dev/null 2>&1; then
+    log_error "Required tool 'flock' (util-linux) is not installed."
+    return 1
+  fi
+  # Bash picks a free descriptor and stores it in ATLAS_LOCK_FD (no eval needed).
+  exec {ATLAS_LOCK_FD}>"${ATLAS_LOCK_FILE}"
+  flock -n "${ATLAS_LOCK_FD}"
+}
