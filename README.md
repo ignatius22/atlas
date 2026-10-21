@@ -18,8 +18,6 @@ $ atlas restore drill glitchtip
 
 > **Design partners wanted.** We are looking for 10 people running real apps on a VPS to use Atlas free and tell us what breaks. We install it with you on a 30-minute call. [Open an issue titled "Design partner"](https://github.com/ignatius22/atlas/issues/new?title=Design%20partner) and we will get in touch.
 
----
-
 ## Install
 
 On the server, as root:
@@ -30,299 +28,146 @@ curl -fsSL https://raw.githubusercontent.com/ignatius22/atlas/master/get.sh | su
 
 In a few minutes it installs Atlas to `/opt/atlas`, finds the apps running in Docker, takes the first backup, restores it into a throwaway container to prove it works, and schedules backups every 6 hours plus a daily restore drill. It then lists what is left: offsite storage and a watchdog URL.
 
-- **Encryption key.** If you are at a terminal, it creates the age keypair, shows you the private key once and keeps only the public key on the server. To use your own key, or for unattended installs, pass `--age-recipient=age1...` (from `age-keygen` on your laptop): `curl -fsSL .../get.sh | sudo bash -s -- --yes --age-recipient=age1...`
+- **Encryption key.** At a terminal, the installer creates an age keypair, shows you the private key once and keeps only the public key on the server. For your own key or an unattended install, pass `--age-recipient=age1...` (from `age-keygen` on your laptop): `curl -fsSL .../get.sh | sudo bash -s -- --yes --age-recipient=age1...`
 - **Safe to re-run.** Running it again upgrades the code and keeps your `.env`, `config/apps.yml` and dashboard token.
 - **Options.** `--yes`, `--ref=v1.2.0`, `--dir=PATH`, `--no-first-run`, `--no-start`, `--no-deps`, `--no-discover`. Read the script before you pipe it: [`get.sh`](get.sh).
 
----
+Requirements: Linux with systemd, Docker, Python 3. The installer adds `age` and `rclone` if they are missing.
 
-## The Core Engineering Thesis
+## How it works
 
-> **A backup is not trustworthy merely because it exists. Atlas verifies that it can actually be restored.**
->
-> **The Durability Invariant:** No local backup is deleted by retention unless Atlas has established that a corresponding, recoverable off-site copy exists in cloud storage.
-
----
-
-## 1. Problem & Failure Modes
-
-Traditional single-host backup scripts suffer from silent, catastrophic failure modes:
-
-1. **Premature Retention Deletion**: When offsite replication fails (cloud outage, expired credentials, network partition), standard retention scripts blindly prune older local backups on a schedule. Over time, all local copies are deleted, while remote storage holds zero valid copies.
-2. **Untested Restorability**: Backups that complete with exit code 0 often fail during real disasters due to corrupted SQL streams, missing table schemas, or version incompatibilities.
-3. **Secret Key Exposure**: Placing private decryption keys on production VPS hosts exposes backups to complete compromise if the host is breached.
-4. **Silent Scheduler Failure**: Host reboots and transient downtimes cause cron to permanently skip scheduled runs, silently degrading Recovery Point Objectives (RPO) from 6 hours to days.
-5. **Command Injection in Management APIs**: Unauthenticated dashboard endpoints executing shell commands with user inputs expose VPS hosts to remote root compromise.
-
----
-
-## 2. Safety Invariants & Engineering Guarantees
-
-Atlas enforces five non-negotiable safety invariants:
-
-* **Strict Durability Gate (`.synced` Authorization)**: Local retention pruning is blocked for any backup archive that lacks an atomic `.synced` marker. The `.synced` marker is written **only after** an explicit remote object existence check (`rclone lsf` or `aws s3 ls`) succeeds.
-* **Asymmetric Zero-Knowledge Encryption**: All off-site archives are encrypted on the host using `age` (X25519 public recipient keys). The private identity key is **never** stored on the VPS.
-* **Isolated Restoration Proof**: Every backup records a manifest of its tables and exact row counts, read from the dump itself. A daily restore drill (`atlas-drill.timer`) restores each app's newest backup into a throwaway container running the same Postgres image as production, then checks every table's row count against that manifest. Results are recorded next to each archive (`.drill.json`), alerted on failure, and shown in the dashboard.
-* **Kernel Advisory Concurrency Locking**: Script executions use non-blocking Linux kernel advisory locks (`flock -n`). Process crashes or abnormal terminations immediately release locks via the kernel; stale lock files cannot exist.
-* **Zero Shell Interpretation in Management APIs**: The dashboard server (`dashboard/server.py`) operates with structured argument arrays (`shell=False`), token authentication (`hmac.compare_digest`), strict regex allowlists, and localhost (`127.0.0.1`) binding.
-
----
-
-## 3. Architecture & Data Flow
-
-![Atlas Architecture](docs/architecture.svg)
-
-```text
-       systemd.timer
-    (00, 06, 12, 18 UTC)
-             │
-             ▼
-      scripts/backup.sh
-             │
-             ├──> Database dump (pg_dump / mariadb-dump / mongodump -> .tmp)
-             ├──> Gzip compression (-9 -> .sql.gz)
-             ├──> Checksum computation (SHA-256)
-             └──> Metadata manifest generation (.meta.json)
-             │
-             ▼
-       LOCAL BACKUP ─────────────────────────┐
-             │                               │
-             │                               │ [Retention Gate]
-             ▼                               │ Strictly preserves un-synced archives;
-   scripts/sync-offsite.sh                   │ local copies are ONLY pruned when
-             │                               │ .synced authorization marker exists
-             ├──> Age asymmetric encryption (.age)
-             ├──> Bounded retry (3 attempts: 5s, 10s, 20s backoff)
-             ├──> Remote cloud upload (Cloudflare R2 / AWS S3)
-             └──> Remote verification gate (rclone lsf / aws s3 ls)
-             │                               │
-             ▼                               │
-   .synced DURABILITY AUTHORIZATION ─────────┘
-             │
-             ▼
-    Cloud Object Storage (R2 / S3)
-             │
-             ▼
-   Disaster Recovery (scripts/restore.sh)
-             │
-             ├──> Decrypt with offsite private key (age -d)
-             ├──> Verify SHA-256 checksum integrity
-             ├──> Stream to isolated test container (test_<app>_db)
-             └──> Execute database schema & row-count recovery validation
+```mermaid
+flowchart LR
+    subgraph server ["Your server"]
+        direction TB
+        bt(["atlas-backup.timer<br/>every 6 hours"]) --> backup["backup.sh<br/>dump, compress, checksum,<br/>record row counts"]
+        backup --> local[("/var/backups/app")]
+        local --> sync["sync-offsite.sh<br/>encrypt with age, upload,<br/>confirm the object exists"]
+        sync -- "writes .synced" --> local
+        dt(["atlas-drill.timer<br/>daily 03:30 UTC"]) --> drill["drill.sh<br/>restore into a throwaway<br/>container, compare counts"]
+        local --> drill
+    end
+    sync --> bucket[("Your S3 or R2 bucket<br/>encrypted files only")]
+    backup & drill -. "status report" .-> watchdog["healthchecks.io<br/>or any dead-man's switch"]
+    key["age private key<br/>kept off the server"] -. "decrypts in a real recovery" .-> bucket
 ```
 
----
+1. **Back up.** `backup.sh` dumps each database from inside its container (`pg_dump`, `mariadb-dump`/`mysqldump`, or `mongodump`), compresses it and writes a checksum. It reads every table's row count (or collection's document count) from the dump itself and stores it in `<archive>.manifest.json`. A dump that is empty or cut off is rejected and never replaces a good one. Docker volumes and folders listed under `files:` are archived the same way.
+2. **Copy offsite.** `sync-offsite.sh` encrypts each archive with your age public key, uploads it with up to 3 attempts, then lists the bucket to confirm the object is there. Only then does it write `<archive>.synced`. After an outage it uploads every archive still missing, oldest first.
+3. **Prove it restores.** Each night `drill.sh` starts a throwaway container from the same image production runs, restores the newest backup into it, and compares every table's count with the manifest. The result is written to `<archive>.drill.json`, shown in the dashboard and alerted on failure. Production is never touched.
+4. **Report.** After every backup and drill run, a short status report (no data, no keys) goes to your watchdog. Problems go to its failure URL, and silence trips it too.
 
-## 4. Engineering Case Study: Designing for Failure
+Local retention deletes an archive only after it is past its retention period **and** has a `.synced` marker. If uploads fail for three weeks, you keep three weeks of local backups.
 
-### Why Retention Depends on Verified Remote Durability
-The most dangerous failure in backup engineering is not a failed upload—it is a successful local retention prune following a failed upload. In Atlas, local backups are considered **unauthorized for deletion** until remote existence is cryptographically and functionally verified. If cloud storage returns 5xx or the network is down for 3 weeks, Atlas preserves all local archives.
+## Everyday commands
 
-### Why `.synced` is an Authorization Record, Not a Status Flag
-A simple database boolean or in-memory flag is vulnerable to process crashes and race conditions. Atlas writes `${backup_file}.synced` via an atomic filesystem move (`mv .synced.tmp.$$ .synced`) only after cloud object listing confirms remote persistence. The retention engine treats the physical existence of this file as a cryptographic authorization token.
+| Command | What it does |
+| --- | --- |
+| `atlas discover [--write]` | Proposes `apps.yml` entries from running containers; `--write` adds them (a backup copy of the file is kept) |
+| `atlas backup create --all` | Backs up every app now (or name one app instead of `--all`) |
+| `atlas backup sync --all` | Encrypts and uploads every archive not yet confirmed offsite |
+| `atlas backup list myapp` | Lists the offsite archives for an app |
+| `atlas restore drill [myapp]` | Restore-tests the newest backup of one app, or all apps |
+| `atlas restore files myapp --to=DIR` | Extracts an app's files archive into a new directory; never touches live data |
+| `atlas restore run myapp --target=production` | Restores into the production database after a safety backup and a typed confirmation |
+| `atlas heartbeat status` / `send` | Shows the watchdog report, or sends it now |
+| `atlas doctor` | Read-only check of the host, Docker, backups and timers |
 
-### Why Historical Backlog Discovery Matters
-When cloud connectivity is restored after an extended outage, standard backup scripts only upload the newest backup, permanently abandoning un-replicated historical snapshots. Atlas's `find_unreplicated_backups()` scans the entire storage directory and synchronizes all pending archives in chronological order (oldest to newest).
+Logs: `journalctl -u atlas-backup -n 100` and `journalctl -u atlas-drill -n 100`.
 
-### Why Systemd `Persistent=true` Replaced Legacy Cron
-Plain `cron` permanently skips scheduled triggers that occur while a host is powered off or rebooting. Atlas utilizes native `systemd.timer` with `Persistent=true` and `AccuracySec=1m`. If the server is offline at 06:00 UTC, systemd immediately triggers the catch-up backup the moment the host boots.
+## Configuration
 
-### Why Bounded Retries with Exponential Backoff
-Cloud APIs and network links experience transient flaps. Atlas wraps off-site synchronization in a bounded 3-attempt retry loop with exponential backoff (5s, 10s, 20s). Persistent failures exit cleanly without hanging processes or creating false durability markers.
-
-### Why Backup and Sync Use Independent Locks
-`backup.sh` holds a kernel lock on `/run/atlas/backup.lock`, `sync-offsite.sh` on `/run/atlas/sync.lock`, and `drill.sh` on `/run/atlas/drill.lock` (override the directory with `ATLAS_LOCK_DIR`). Because local backups write to `.tmp` files and atomically rename them upon completion, offsite uploads cannot read partial dumps. Decoupled locking ensures that slow cloud uploads never block local snapshot creation or urgent recovery drills.
-
-### Why Atlas Does Not Promise Continuous Point-in-Time Recovery (PITR)
-Atlas is designed for single-node application hosting. Continuous Write-Ahead Log (WAL) streaming and PITR introduce complex distributed consensus and high operational overhead. Atlas commits to a transparent **6-Hour Scheduled Snapshot RPO** under normal operation, backed by atomic dumps, persistent timers, and verified offsite replication. Extended host or network outages can increase effective RPO.
-
----
-
-## 5. Directory Structure
-
-```text
-infra-prod/
-├── README.md                      # Architecture & engineering case study
-├── OPERATIONS.md                  # Daily operational runbook
-├── DEPLOYMENT.md                  # Application onboarding & deployment guide
-├── BACKUP.md                      # Backup system architecture & policies
-├── RECOVERY.md                    # Disaster recovery & test restore procedures
-├── SECURITY.md                    # VPS & container hardening standard
-├── TROUBLESHOOTING.md              # Common failure modes & diagnostic playbooks
-├── Makefile                       # Operator convenience commands
-├── .env.example                   # Environment variable template
-├── .gitignore                     # Secret & artifact exclusion rules
-│
-├── docs/
-│   ├── USER_GUIDE.md              # 📖 Comprehensive User Manual & Operations Guide
-│   ├── PRODUCT-PLAN.md            # Product strategy, positioning, pricing & roadmap
-│   ├── ARCHITECTURE.md            # Deep system architecture & durability design
-│   ├── RUNBOOK.md                 # Incident response & emergency playbooks
-│   └── DISASTER_RECOVERY.md       # Cold-start server reconstruction guide
-│
-├── systemd/
-│   ├── atlas-backup.service       # Native oneshot systemd backup & sync service
-│   └── atlas-backup.timer         # 6-Hour UTC persistent catch-up timer
-│
-├── config/
-│   ├── apps.example.yml           # Declarative application registry
-│   └── apps.yml                   # Production application definitions
-│
-├── scripts/
-│   ├── lib/
-│   │   ├── common.sh              # Shared logging, validation & env discovery
-│   │   └── yaml_parser.py         # Declarative YAML query engine
-│   ├── backup.sh                  # Local dump, gzip, sha256 & retention engine
-│   ├── sync-offsite.sh            # Age encryption, bounded retry & remote verification
-│   ├── restore.sh                 # Isolated test & production restore engine
-│   ├── restore-offsite.sh         # Cloud download & decryption restore pipeline
-│   ├── health-check.sh            # Application & database health probe
-│   ├── deploy.sh                  # Docker Compose deployment & image update engine
-│   ├── rollback.sh                # Fast Git/Compose container rollback engine
-│   ├── setup-ssl.sh               # Automated Let's Encrypt Certbot wrapper
-│   └── setup-server.sh            # Idempotent server bootstrap & configuration
-│
-├── dashboard/
-│   ├── server.py                  # Hardened Python 3 API (hmac auth, regex allowlists)
-│   ├── web/                       # React + TypeScript source (Vite)
-│   └── dist/                      # Committed production build served by server.py
-│
-├── bin/
-│   ├── atlas                      # Central management CLI wrapper
-│   └── doctor                     # Read-only 6-section production diagnostic tool
-│
-├── infra/
-│   └── nginx/
-│       ├── nginx.conf             # Hardened production Nginx gateway config
-│       ├── snippets/              # Security headers, SSL params, proxy params
-│       └── templates/             # Virtual host config templates
-│
-└── tests/
-    ├── run-all.sh                 # Comprehensive test runner
-    ├── test-backup.sh             # Local backup engine tests
-    ├── test-offsite.sh            # Durability invariant & backlog sync tests
-    ├── test-doctor.sh             # Diagnostic CLI audit tests
-    ├── test-health-check.sh       # Container probe tests
-    ├── test-yaml.sh               # PyYAML edge-case parsing tests
-    └── test-adversarial.sh        # Security & failure-path test suite
-```
-
----
-
-## 6. Quickstart & Verification
-
-> For a complete, step-by-step walkthrough covering installation, application registration, zero-knowledge encryption, and emergency runbooks, see the **[📖 Comprehensive User Guide](docs/USER_GUIDE.md)**.
-
-### 1. Discover Your Apps
-```bash
-atlas discover           # proposes apps.yml entries from running containers
-atlas discover --write   # adds them to config/apps.yml (a backup copy is kept)
-```
-Containers are grouped by Docker Compose project (Coolify and Dokploy use Compose too). For each project Atlas proposes the PostgreSQL, MySQL, MariaDB or MongoDB container with its database name and user, plus the upload volumes and storage folders mounted by the app's other containers. Database data volumes, caches and the Docker socket are left out, and passwords are never read or printed. Apps already in your config are never changed; if one has upload volumes but no `files:` section, discover prints the block to paste.
-
-### 1b. Run the Diagnostic Doctor
-```bash
-./bin/doctor
-# or
-make doctor
-```
-Inspects CPU, memory, swap, disk capacity, Docker containers, Nginx reverse proxy, SSH configuration, backup integrity, and active scheduler (`systemd.timer` / `cron`).
-
-### 2. Manual Backup & Remote Synchronization
-```bash
-# Execute local backup for all registered applications
-./scripts/backup.sh --all
-
-# Synchronize backlog to Cloudflare R2 / AWS S3
-./scripts/sync-offsite.sh --all
-```
-
-### 3. Run a Restore Drill
-```bash
-# Restores the newest backup into a throwaway container, verifies every table's
-# row count against the backup's manifest, records the result, cleans up
-atlas restore drill myapp      # one app
-atlas restore drill            # every app
-```
-Drills run daily at 03:30 UTC through `atlas-drill.timer`. The installer enables it automatically when `atlas-backup.timer` is enabled; otherwise run `sudo systemctl enable --now atlas-drill.timer`.
-
-### 4. Back Up Files and Docker Volumes
-Databases are only half of most apps: user uploads and generated media live in Docker volumes or host folders. List them per app in `config/apps.yml`:
+Apps live in `/opt/atlas/config/apps.yml`. `atlas discover --write` fills it in for you; this is what an entry looks like:
 
 ```yaml
 apps:
   myapp:
-    files:
-      volumes: [myapp_uploads]            # Docker named volumes
-      paths: [/var/www/myapp/storage]     # host directories
+    database:
+      type: postgres          # postgres, mysql, mariadb or mongodb
+      container: myapp_db
+      name: myapp             # optional for MongoDB: every database is dumped by default
+      user: myapp
+      retention_days: 14      # default 14
+    files:                    # optional: uploads and other data outside the database
+      volumes: [myapp_uploads]
+      paths: [/var/www/myapp/storage]
       exclude: ["cache", "*.log"]
-      every_hours: 24                     # default 24
-      retention_days: 7                   # default 7
+      every_hours: 24         # default 24
+      retention_days: 7       # default 7
 ```
 
-Each run writes `myapp-files-<timestamp>.tar.gz` plus a manifest (file count, bytes and a digest of every file's checksum). Files archives go through the same encryption, offsite confirmation and durability gate as database dumps, and the nightly drill re-reads every file and compares it with the manifest. Apps with only files (no database) are supported.
+Database passwords are never stored in Atlas. They are read inside each container from the image's standard variables (`POSTGRES_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `MONGO_INITDB_ROOT_PASSWORD` and their equivalents) and never appear on a command line.
+
+Server settings live in `/opt/atlas/.env` (mode 600):
+
+| Variable | Purpose |
+| --- | --- |
+| `ATLAS_AGE_RECIPIENT` | Your age public key (`age1...`). Offsite copies are encrypted to it |
+| `ATLAS_S3_BUCKET`, `ATLAS_S3_ENDPOINT`, `ATLAS_S3_ACCESS_KEY`, `ATLAS_S3_SECRET_KEY` | Any S3-compatible bucket: Cloudflare R2, AWS S3, Backblaze B2 |
+| `ATLAS_HEARTBEAT_URL` | Your watchdog's ping URL. Problems go to `<URL>/fail` unless `ATLAS_HEARTBEAT_FAIL_URL` is set; `ATLAS_HEARTBEAT_SECRET` signs each report |
+| `ATLAS_DISCORD_WEBHOOK`, `ATLAS_SLACK_WEBHOOK`, `ATLAS_TELEGRAM_BOT_TOKEN` + `ATLAS_TELEGRAM_CHAT_ID`, `ATLAS_GENERIC_WEBHOOK` | Failure alerts. Success alerts are off unless `ATLAS_NOTIFY_SUCCESS=true` |
+| `ATLAS_DASHBOARD_TOKEN` | Required by the dashboard to run actions; the installer generates one |
+
+## Recovering from a disaster
+
+On a new server, install Atlas with the same `.env` and `apps.yml`, start your app containers, then restore from the bucket with the private key you kept off the server:
 
 ```bash
-atlas restore files myapp --to=/var/restore/myapp   # extracts into a new directory; never touches live data
+# See what is offsite
+atlas backup list myapp
+
+# Restore the newest offsite backup into a throwaway container first, to check it
+ATLAS_AGE_IDENTITY="AGE-SECRET-KEY-1..." atlas restore test myapp
+
+# Then into production
+./scripts/restore-offsite.sh --app=myapp --key-file=/path/to/key.txt --target=production
 ```
 
-### 5. Set Up the External Watchdog
-A server cannot report its own death. After every backup and drill run, Atlas sends a status report (no data, no keys) to a dead-man's-switch service, so you are alerted when a run finds a problem **and** when reports stop arriving.
+To restore a local archive into production on the same server, use `atlas restore run myapp --target=production`. It takes a safety backup of the current database first and asks you to type `CONFIRM-RESTORE-TO-PRODUCTION`. [RECOVERY.md](RECOVERY.md) covers full server loss step by step.
 
-1. Create a check on [healthchecks.io](https://healthchecks.io) (free) or an Uptime Kuma push monitor: period 6 hours, grace 2 hours.
-2. Add its URL to `/opt/atlas/.env`: `ATLAS_HEARTBEAT_URL=https://hc-ping.com/<uuid>`
-3. Send one now: `atlas heartbeat send` (or `atlas heartbeat status` to see the report).
+## Dashboard
 
-Problems (late backups, nothing confirmed offsite, failed or stale drills, a failing run) go to `<URL>/fail`; override with `ATLAS_HEARTBEAT_FAIL_URL`. `ATLAS_HEARTBEAT_SECRET` adds an HMAC signature.
-
-### 6. Enable Native Systemd 6-Hour Persistent Timer
-Systemd is the recommended production scheduler for Atlas. The installer sets up the unit files automatically. To enable and verify the scheduler:
+A small web dashboard shows, per app, the chain from dump to drill: when it was backed up, whether it is offsite, and when it last passed a drill. It binds to `127.0.0.1:8888` only. Reach it through an SSH tunnel:
 
 ```bash
-# Enable and start the timer
-sudo systemctl enable --now atlas-backup.timer
-
-# Inspect timer schedule and status
-systemctl list-timers atlas-backup.timer
-systemctl status atlas-backup.timer
-
-# View backup service execution logs
-journalctl -u atlas-backup.service -n 100 --no-pager
+ssh -N -L 8888:127.0.0.1:8888 you@your-server   # then open http://localhost:8888
 ```
 
-> **Note on Cron:** Cron is supported strictly as a fallback in environments without systemd. Cron does not provide persistent catch-up after downtime; if your server is offline during a cron interval, that backup is lost until the next cycle. Systemd's `Persistent=true` guarantees immediate catch-up upon boot.
+Viewing needs no token; running a backup, upload or drill from the page asks for `ATLAS_DASHBOARD_TOKEN`. See [dashboard/README.md](dashboard/README.md).
 
-### 5. Access the Web Dashboard
-Atlas includes an internal dashboard service that binds strictly to `127.0.0.1:8888` by default and requires `ATLAS_DASHBOARD_TOKEN`.
+## Design decisions
 
-```bash
-# Verify dashboard health and system status
-curl -sS http://127.0.0.1:8888/api/health
-curl -sS http://127.0.0.1:8888/api/status
+**Why the `.synced` marker is a file.** It is created by an atomic rename only after the bucket listing shows the object, so a crash at any point leaves either no marker or a valid one. Retention checks for the file, not a status in memory.
 
-# Access securely from your local workstation via SSH tunnel
-ssh -N -L 8888:127.0.0.1:8888 root@your-vps-ip
-```
+**Why systemd timers, not cron.** With `Persistent=true`, a run missed while the server was off happens as soon as it boots. Cron skips it silently.
 
-> **Security Warning:** Do not expose the dashboard publicly until a domain, reverse proxy (Nginx with TLS), and authentication strategy are configured.
+**Why separate locks.** Backups, uploads and drills each hold their own kernel lock (`flock`) under `/run/atlas`. A slow upload never blocks the next backup, and a crashed process cannot leave a stale lock behind. Uploads read only finished archives, because dumps are written to a temporary file and renamed when complete.
 
-### 6. Alerting Notifications (Discord & Slack)
-Configure `ATLAS_DISCORD_WEBHOOK` or `ATLAS_SLACK_WEBHOOK` in `/opt/atlas/.env`. Atlas dispatches alerts on backup failure, R2 sync failure, restore-drill failure, and repeated scheduler failure. Webhook URLs are never exposed in logs, CLI output, UI, or Git. Success notifications remain disabled by default (`ATLAS_NOTIFY_SUCCESS=false`).
+**Why the drill uses the production image.** A dump from Postgres 16 is restored on Postgres 16, not on whatever the test image happens to be. Override it per app with `database.restore_image`.
 
----
+**What Atlas does not do.** No point-in-time recovery: you can lose up to 6 hours of writes, or more if the server is down. No Kubernetes, managed databases (RDS, Neon, Supabase cloud) or Windows. For point-in-time recovery on a busy Postgres, use a WAL-based tool such as pgBackRest or WAL-G alongside Atlas.
 
-## 7. Operational Distinction Matrix
+## Repository layout
 
-| Operation | What it Does | What it Does NOT Do |
-| :--- | :--- | :--- |
-| **`backup.sh`** | Dumps DB, compresses with `gzip -9`, computes SHA-256, writes metadata, prunes verified local copies. | Does not upload offsite; does not prune un-synced backups. |
-| **`sync-offsite.sh`** | Discovers un-synced backups, encrypts with `age`, uploads with bounded retry, verifies remote object, writes `.synced`. | Does not delete local or remote backups. |
-| **`restore.sh --target=test`** | Streams backup into an ephemeral test container, validates SQL structure and health, tears down container. | Does not touch production databases or modify local archive files. |
-| **`restore.sh --target=prod`** | Prompts for confirmation, stops app container, recreates DB, executes single-transaction restore. | Does not execute automatically without explicit operator invocation. |
-| **`doctor`** | 6-section read-only diagnostic verification of host, security, containers, backups, and scheduler. | Does not modify files, restart services, or delete data. |
+| Path | Contents |
+| --- | --- |
+| `get.sh` | One-line installer |
+| `bin/atlas`, `bin/doctor` | CLI and read-only diagnostics |
+| `scripts/` | `backup.sh`, `sync-offsite.sh`, `drill.sh`, `restore.sh`, `restore-offsite.sh`, `restore-files.sh`, `install.sh` |
+| `scripts/lib/` | Dump manifests, files archives, discover, heartbeat, notifications |
+| `systemd/` | Backup and drill services and timers |
+| `dashboard/` | Python API (`server.py`) and React app; the build in `dist/` is committed so servers need no Node.js |
+| `config/` | `apps.example.yml` |
+| `tests/` | `run-all.sh` plus one suite per area, run in CI against PostgreSQL 14, 15 and 16, MySQL, MariaDB and MongoDB |
 
----
+The repository also carries the deployment helpers we use on our own servers (`deploy.sh`, `rollback.sh`, `setup-ssl.sh`, `infra/nginx`). They are optional and not part of the backup path.
 
-## 8. License
+More detail: [docs/USER_GUIDE.md](docs/USER_GUIDE.md), [BACKUP.md](BACKUP.md), [RECOVERY.md](RECOVERY.md), [SECURITY.md](SECURITY.md), [TROUBLESHOOTING.md](TROUBLESHOOTING.md), [docs/PRODUCT-PLAN.md](docs/PRODUCT-PLAN.md).
 
-MIT License. Designed and engineered for production reliability.
+## Contributing
+
+Run the tests with `make test` (Docker is needed for the end-to-end suites). See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[Apache License 2.0](LICENSE).

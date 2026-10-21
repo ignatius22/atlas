@@ -746,9 +746,8 @@ sudo journalctl -u atlas-backup.service -n 50      # View backup execution logs
 
 ## 28. Further Reading & Architecture Docs
 
-* **[README.md](../README.md)** — Project overview, core thesis, and engineering case study.
-* **[Architecture Diagram (SVG)](architecture.svg)** — Modern visual blueprint and durability lifecycle map.
-* **[Architecture Source (Mermaid)](architecture.mmd)** — Auditable Mermaid diagram specification.
+* **[README.md](../README.md)** — What Atlas does, how it works, and the design decisions behind it.
+* **[Architecture diagram (Mermaid source)](architecture.mmd)** — The diagram shown in the README's "How it works" section.
 * **[OPERATIONS.md](../OPERATIONS.md)** — Daily operational playbooks and maintenance checklists.
 * **[DEPLOYMENT.md](../DEPLOYMENT.md)** — Application onboarding and Docker Compose conventions.
 * **[BACKUP.md](../BACKUP.md)** — Detailed backup policies, snapshot lifecycle, and retention mechanics.
