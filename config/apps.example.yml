@@ -33,7 +33,7 @@ apps:
 
     # Database configuration & automated backup policy
     database:
-      type: "postgres"
+      type: "postgres"               # postgres, mysql or mariadb
       container: "example_postgres"
       name: "example_db"
       user: "example_user"
