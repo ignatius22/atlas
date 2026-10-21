@@ -4,6 +4,7 @@ All notable changes to Atlas will be documented in this file.
 
 ## [Unreleased]
 ### Added
+- `atlas discover [--write]`: proposes `apps.yml` entries from running containers, grouped by Compose project (works with Coolify and Dokploy). Detects PostgreSQL, MySQL and MariaDB containers with database name and user, and upload volumes and folders on the app's other containers, skipping database data volumes, caches and the Docker socket. Never reads passwords; `--write` inserts new apps inside the `apps:` block, keeps comments, and saves a backup copy.
 - External watchdog (heartbeat). After every backup and drill run, Atlas sends a status report (per app: newest backup age, offsite confirmation, last drill; no data or keys) to `ATLAS_HEARTBEAT_URL`. Problems go to `<URL>/fail` (healthchecks.io convention). Pointed at a dead-man's-switch service, this catches a server or timer that stops running, which the server cannot report itself. Optional HMAC signature (`ATLAS_HEARTBEAT_SECRET`). `atlas heartbeat status|send`. The dashboard shows whether it is set up.
 - MySQL and MariaDB support (`database.type: mysql` or `mariadb`). Dumps use `--single-transaction` with routines, triggers and events, and read passwords from the container's own environment. The manifest counts rows per table from the dump's INSERT statements (single-line MySQL and multi-line MariaDB formats) and rejects dumps missing the `-- Dump completed` footer. Restore drills run on the production container's image and verify every table; production restores are supported.
 - Test-restore containers are checked for readiness over TCP, so a database's temporary init server is never mistaken for the real one.
@@ -30,6 +31,7 @@ All notable changes to Atlas will be documented in this file.
 - `infra/nginx/production/`: live nginx configs for our own sites. They were never read from the repo (the server uses its own copies in `/etc/nginx`). Generic `nginx.conf`, snippets and the app template remain.
 
 ### Fixed
+- When `pg_dump` or `mysqldump`/`mariadb-dump` fails, `backup.sh` now reports the tool's own error (for example `database "x" does not exist`) instead of only "decompressed SQL stream is empty".
 - `atlas-backup.service` wrote `exit $rc`, which systemd expands itself (to empty) before bash runs, so a failed backup followed by a successful sync exited 0 and systemd recorded success. Shell variables in unit files are now written `$$rc`, with a test that keeps them escaped.
 - Dashboard reported every database container without a Docker healthcheck as "not found / stopped" on newer Docker versions (Go template error on `.State.Health`). It now reads `docker inspect` JSON.
 - `backup.sh` and `sync-offsite.sh` used lock directories in `/tmp`. A crash, `kill -9` or OOM left the directory behind and silently blocked every later backup or sync. They now use kernel locks (`flock`) on `/run/atlas/*.lock`, which the kernel releases when the process dies, as the README always described. Leftover `/tmp/atlas_*.lock.d` directories are ignored.
