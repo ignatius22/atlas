@@ -182,6 +182,29 @@ assert_output_equals "overwritten_value" \
   "Handles duplicate key mapping predictably according to YAML 1.2 spec"
 
 # ------------------------------------------------------------------------------
+# atlas config validate and atlas status
+# ------------------------------------------------------------------------------
+printf "\n\033[1m=== Config Validation ===\033[0m\n"
+printf 'apps:\n  "shop;rm -rf":\n    database: {type: oracle, container: "db$(x)"}\n    files: {paths: [relative/dir]}\n' > "${TMP_DIR}/bad.yml"
+"${ATLAS_ROOT}/bin/atlas" config validate "${TMP_DIR}/bad.yml" > "${TMP_DIR}/bad.out" 2>&1 && bad_rc=0 || bad_rc=$?
+if [ "${bad_rc}" -eq 1 ] && grep -q "app names may only use" "${TMP_DIR}/bad.out" && grep -q "is not one of postgres" "${TMP_DIR}/bad.out" \
+  && grep -q "not a valid container name" "${TMP_DIR}/bad.out" && grep -q "must be an absolute path" "${TMP_DIR}/bad.out"; then
+  printf "  \033[32m✓ PASS\033[0m: config validate reports bad names, unknown database types, unsafe containers and relative paths\n"; PASSED=$((PASSED + 1))
+else
+  printf "  \033[31m✗ FAIL\033[0m: config validate on a bad file (rc=%s): %s\n" "${bad_rc}" "$(cat "${TMP_DIR}/bad.out")"; FAILED=$((FAILED + 1))
+fi
+if "${ATLAS_ROOT}/bin/atlas" config validate "${ATLAS_ROOT}/config/apps.example.yml" > "${TMP_DIR}/ok.out" 2>&1 && ! grep -q "warning" "${TMP_DIR}/ok.out"; then
+  printf "  \033[32m✓ PASS\033[0m: the shipped example config validates with no warnings\n"; PASSED=$((PASSED + 1))
+else
+  printf "  \033[31m✗ FAIL\033[0m: example config: %s\n" "$(cat "${TMP_DIR}/ok.out")"; FAILED=$((FAILED + 1))
+fi
+if ATLAS_BACKUP_DIR="${TMP_DIR}/none" ATLAS_CONFIG_FILE="${ATLAS_ROOT}/config/apps.example.yml" "${ATLAS_ROOT}/bin/atlas" status | python3 -I -c 'import json,sys; r=json.load(sys.stdin); assert r["event"] == "status" and "example-app: configured but has no backups yet" in r["problems"], r'; then
+  printf "  \033[32m✓ PASS\033[0m: atlas status reports configured apps and their problems\n"; PASSED=$((PASSED + 1))
+else
+  printf "  \033[31m✗ FAIL\033[0m: atlas status\n"; FAILED=$((FAILED + 1))
+fi
+
+# ------------------------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------------------------
 printf "\n\033[1mPyYAML Tests Summary: %d passed, %d failed\033[0m\n" "${PASSED}" "${FAILED}"

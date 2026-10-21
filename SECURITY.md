@@ -1,89 +1,32 @@
-# Atlas Production Security Standard & Hardening Guide
+# Security
 
-Atlas enforces a strict, defense-in-depth security model across the host OS, network ingress, containers, and credential management.
+## Reporting a vulnerability
 
----
+Please report security problems privately through GitHub: on the repository page, open **Security**, then **Report a vulnerability**. Do not open a public issue. We aim to reply within 3 working days and will credit you in the changelog unless you would rather we didn't.
 
-## 1. Core Security Principles
+## What Atlas protects, and how
 
-1. **Zero Public Database/Cache Exposure:** Database (PostgreSQL 5432) and cache (Redis 6379) ports MUST NEVER be published to `0.0.0.0` on the host. All service communication occurs over private Docker bridge networks.
-2. **Key-Only SSH:** Password authentication is disabled on SSH. Only authorized cryptographic keys are permitted.
-3. **No Hardcoded Secrets:** Credentials, API keys, and JWT secrets must never appear in `docker-compose.yml`, Git repositories, or scripts. All secrets live in `.env` files with `chmod 600` permissions.
-4. **Non-Root Containers:** Containers should drop root privileges where possible (e.g. `USER node` in Node.js applications).
-5. **Modern TLS Standards:** TLS 1.0 and 1.1 are disabled. Public traffic is encrypted with TLS 1.2 and TLS 1.3 with Perfect Forward Secrecy (PFS).
+Atlas runs as root on your server, because it needs `docker exec` into your database containers and read access to your volumes. It is built so that the server is never the only thing standing between an attacker and your backups.
 
----
+| Risk | What Atlas does |
+| --- | --- |
+| Someone takes over the server and reads your offsite backups | Archives are encrypted on the server with your age **public** key before upload. The private key is never on the server, so a compromised server cannot decrypt anything in the bucket. |
+| Someone takes over the server and deletes your offsite backups | Atlas never deletes from the bucket, so its credentials only need write access. Use a key without delete permission, and turn on versioning or object lock in the bucket. |
+| A failed upload leads to local copies being pruned | A local archive is deleted only after its encrypted copy has been confirmed in the bucket (the `.synced` marker). |
+| A backup looks fine but cannot be restored | Daily restore drills restore every backup in a throwaway container and compare row counts with what was dumped. |
+| Database passwords leak into logs or process lists | Passwords are read inside each container from the image's own variables and passed through the environment or a private config file, never on a command line. Atlas does not store them. |
+| The dashboard becomes a way in | It binds to `127.0.0.1` only. Reading needs no token; every action requires `ATLAS_DASHBOARD_TOKEN`, compared in constant time. Actions run fixed commands with argument lists (no shell), and app names are checked against `^[a-zA-Z0-9_-]+$`. |
+| Malicious input in `apps.yml` or arguments | App and container names are checked against strict patterns everywhere they are used, and the CLI never passes arguments through `eval`. `tests/test-adversarial.sh` covers injection and path traversal. |
+| A restore overwrites good data by mistake | Drills never touch production. A production restore takes a safety backup first and needs a typed confirmation. Files are restored into a new directory, never over live data. |
+| A restore extracts files outside its target | Files archives are checked before extraction; absolute paths, `..` and links pointing outside the target are refused. |
 
-## 2. Host Hardening Checklist
+## What you are responsible for
 
-### SSH Configuration (`/etc/ssh/sshd_config`)
-```text
-PasswordAuthentication no
-PermitRootLogin prohibit-password
-KbdInteractiveAuthentication no
-UsePAM yes
-```
-Validate syntax and reload:
-```bash
-sshd -t && systemctl reload ssh
-```
+- **Keep the private key and a copy of `.env` off the server**, for example in a password manager. See [RECOVERY.md](RECOVERY.md).
+- **Keep `/opt/atlas/.env` at mode 600.** It holds the bucket credentials and dashboard token. The installer sets this.
+- **Do not publish the dashboard port.** Reach it through an SSH tunnel.
+- **Keep the host patched**, and SSH key-only. `atlas doctor` checks, read-only, whether SSH allows passwords or root logins and whether the firewall is on. Never publish database ports to the internet.
 
-### Firewall Configuration (UFW)
-Only open necessary public ingress ports:
-```bash
-# Default policies
-ufw default deny incoming
-ufw default allow outgoing
+## Supported versions
 
-# Ingress rules
-ufw allow 22/tcp comment 'OpenSSH'
-ufw allow 80/tcp comment 'HTTP ACME & Redirect'
-ufw allow 443/tcp comment 'HTTPS TLS Gateway'
-
-# Enable firewall
-ufw enable
-```
-
----
-
-## 3. Container Hardening Standard
-
-### Example Secure Service Definition (`docker-compose.prod.yml`)
-```yaml
-services:
-  api:
-    image: myapp_api:latest
-    user: "1000:1000" # Run as unprivileged non-root user
-    restart: always
-    read_only: false
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 512M
-    networks:
-      - internal_app_network
-
-  database:
-    image: postgres:16-alpine
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - internal_app_network
-    # DO NOT EXPOSE PORTS TO HOST!
-```
-
----
-
-## 4. Secret Sanitization & Git Hygiene
-
-* Always verify that `.gitignore` contains `.env`, `.env.*`, and `*.sql.gz`.
-* Never use fallback defaults for secrets in `docker-compose.yml` (e.g. avoid `${JWT_SECRET:-default_secret}`).
-* If secrets were committed to a repository in the past, consider them compromised and rotate them immediately.
+Security fixes go into the latest release. Upgrade by running the installer again; it keeps your settings.

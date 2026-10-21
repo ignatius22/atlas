@@ -53,7 +53,7 @@ flowchart LR
 ```
 
 1. **Back up.** `backup.sh` dumps each database from inside its container (`pg_dump`, `mariadb-dump`/`mysqldump`, or `mongodump`), compresses it and writes a checksum. It reads every table's row count (or collection's document count) from the dump itself and stores it in `<archive>.manifest.json`. A dump that is empty or cut off is rejected and never replaces a good one. Docker volumes and folders listed under `files:` are archived the same way.
-2. **Copy offsite.** `sync-offsite.sh` encrypts each archive with your age public key, uploads it with up to 3 attempts, then lists the bucket to confirm the object is there. Only then does it write `<archive>.synced`. After an outage it uploads every archive still missing, oldest first.
+2. **Copy offsite.** `sync-offsite.sh` encrypts each archive with your age public key, uploads it with up to 3 attempts, then checks the object's size and checksum in the bucket. Only then does it write `<archive>.synced`. After an outage it uploads every archive still missing, oldest first.
 3. **Prove it restores.** Each night `drill.sh` starts a throwaway container from the same image production runs, restores the newest backup into it, and compares every table's count with the manifest. The result is written to `<archive>.drill.json`, shown in the dashboard and alerted on failure. Production is never touched.
 4. **Report.** After every backup and drill run, a short status report (no data, no keys) goes to your watchdog. Problems go to its failure URL, and silence trips it too.
 
@@ -70,7 +70,8 @@ Local retention deletes an archive only after it is past its retention period **
 | `atlas restore drill [myapp]` | Restore-tests the newest backup of one app, or all apps |
 | `atlas restore files myapp --to=DIR` | Extracts an app's files archive into a new directory; never touches live data |
 | `atlas restore run myapp --target=production` | Restores into the production database after a safety backup and a typed confirmation |
-| `atlas heartbeat status` / `send` | Shows the watchdog report, or sends it now |
+| `atlas status` | Every app's newest backup, offsite copy and last drill, with any problems |
+| `atlas heartbeat send` | Sends the watchdog report now |
 | `atlas doctor` | Read-only check of the host, Docker, backups and timers |
 
 Logs: `journalctl -u atlas-backup -n 100` and `journalctl -u atlas-drill -n 100`.
@@ -123,7 +124,7 @@ ATLAS_AGE_IDENTITY="AGE-SECRET-KEY-1..." atlas restore test myapp
 ./scripts/restore-offsite.sh --app=myapp --key-file=/path/to/key.txt --target=production
 ```
 
-To restore a local archive into production on the same server, use `atlas restore run myapp --target=production`. It takes a safety backup of the current database first and asks you to type `CONFIRM-RESTORE-TO-PRODUCTION`. [RECOVERY.md](RECOVERY.md) covers full server loss step by step.
+To restore a local archive into production on the same server, use `atlas restore run myapp --target=production`. It takes a safety backup of the current database first and asks you to type `CONFIRM-RESTORE-TO-PRODUCTION`. [RECOVERY.md](RECOVERY.md) covers every case step by step, including files and a compromised server.
 
 ## Dashboard
 
@@ -162,7 +163,16 @@ Viewing needs no token; running a backup, upload or drill from the page asks for
 
 The repository also carries the deployment helpers we use on our own servers (`deploy.sh`, `rollback.sh`, `setup-ssl.sh`, `infra/nginx`). They are optional and not part of the backup path.
 
-More detail: [docs/USER_GUIDE.md](docs/USER_GUIDE.md), [BACKUP.md](BACKUP.md), [RECOVERY.md](RECOVERY.md), [SECURITY.md](SECURITY.md), [TROUBLESHOOTING.md](TROUBLESHOOTING.md), [docs/PRODUCT-PLAN.md](docs/PRODUCT-PLAN.md).
+## Documentation
+
+| Doc | For |
+| --- | --- |
+| [User guide](docs/USER_GUIDE.md) | Installing, adding apps, offsite storage, drills, alerts, every command |
+| [Recovery](RECOVERY.md) | Rolling back a database, restoring files, rebuilding a lost server |
+| [Troubleshooting](TROUBLESHOOTING.md) | What an error means and how to fix it |
+| [Security](SECURITY.md) | The security model, and how to report a vulnerability |
+| [Deploy helpers](docs/DEPLOYMENT.md) | The optional deploy, rollback and TLS scripts |
+| [Changelog](CHANGELOG.md) | What changed |
 
 ## Contributing
 
