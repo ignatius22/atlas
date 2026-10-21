@@ -4,6 +4,22 @@ Atlas is a resilient, application-agnostic infrastructure, disaster recovery, an
 
 ---
 
+## Install
+
+On the server, as root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ignatius22/atlas/master/get.sh | sudo bash
+```
+
+In a few minutes it installs Atlas to `/opt/atlas`, finds the apps running in Docker, takes the first backup, restores it into a throwaway container to prove it works, and schedules backups every 6 hours plus a daily restore drill. It then lists what is left: offsite storage and a watchdog URL.
+
+- **Encryption key.** If you are at a terminal, it creates the age keypair, shows you the private key once and keeps only the public key on the server. To use your own key, or for unattended installs, pass `--age-recipient=age1...` (from `age-keygen` on your laptop): `curl -fsSL .../get.sh | sudo bash -s -- --yes --age-recipient=age1...`
+- **Safe to re-run.** Running it again upgrades the code and keeps your `.env`, `config/apps.yml` and dashboard token.
+- **Options.** `--yes`, `--ref=v1.2.0`, `--dir=PATH`, `--no-first-run`, `--no-start`, `--no-deps`, `--no-discover`. Read the script before you pipe it: [`get.sh`](get.sh).
+
+---
+
 ## The Core Engineering Thesis
 
 > **A backup is not trustworthy merely because it exists. Atlas verifies that it can actually be restored.**

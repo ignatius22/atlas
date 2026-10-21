@@ -65,6 +65,15 @@ def engine_of(image):
     return None
 
 
+def db_server_score(c):
+    score = 0
+    if any((m.get("Destination") or "").startswith(DB_DATA_PATHS) for m in c.get("Mounts") or []):
+        score += 2
+    if any(k.startswith(("POSTGRES_", "MYSQL_", "MARIADB_")) for k in env_map(c)):
+        score += 1
+    return score
+
+
 def slug(name):
     s = re.sub(r"[^a-z0-9_-]+", "-", name.lower()).strip("-_")
     if not s or not s[0].isalnum():
@@ -89,12 +98,14 @@ def propose(containers):
 
     apps = {}
     for project, members in sorted(projects.items()):
+        # The database is the container running a database image; when several
+        # share one (a migration job, a tool image), prefer the one that owns the
+        # data directory or was configured as a server.
         db = None
-        for c in members:
-            engine = engine_of((c.get("Config") or {}).get("Image", ""))
-            if engine:
-                db = (c, engine)
-                break
+        candidates = [(c, engine_of((c.get("Config") or {}).get("Image", ""))) for c in members]
+        candidates = [(c, e) for c, e in candidates if e]
+        if candidates:
+            db = max(candidates, key=lambda ce: db_server_score(ce[0]))
 
         volumes, paths = [], []
         for c in members:

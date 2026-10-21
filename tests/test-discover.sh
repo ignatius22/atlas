@@ -29,6 +29,26 @@ trap cleanup EXIT
 
 printf "\n\033[1m=== atlas discover Tests ===\033[0m\n"
 
+# Pure logic, no Docker needed: with two containers on a database image, the
+# one that owns the data directory is the database.
+if python3 -I - "${DISCOVER}" << 'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("discover", sys.argv[1])
+d = importlib.util.module_from_spec(spec); spec.loader.exec_module(d)
+lbl = {"com.docker.compose.project": "shop"}
+tool = {"Name": "/shop_migrate", "Config": {"Image": "postgres:16", "Labels": lbl, "Env": []}, "Mounts": []}
+server = {"Name": "/shop_db", "Config": {"Image": "postgres:16", "Labels": lbl, "Env": ["POSTGRES_DB=shopdb"]},
+          "Mounts": [{"Type": "volume", "Name": "shop_pg", "Destination": "/var/lib/postgresql/data"}]}
+apps = d.propose([tool, server])
+assert apps["shop"]["database"]["container"] == "shop_db", apps
+assert apps["shop"]["database"]["name"] == "shopdb", apps
+PY
+then
+  pass "Picks the container that owns the database data when several use a database image"
+else
+  fail "Database container choice"
+fi
+
 if ! docker info > /dev/null 2>&1; then
   printf "  \033[33m⚠ SKIP\033[0m: Docker daemon not reachable; discover tests skipped\n"
   exit 0
