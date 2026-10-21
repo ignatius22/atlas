@@ -197,7 +197,10 @@ if [ "${DECOMPRESSED_BYTES}" -lt 50 ]; then
   exit 1
 fi
 
-if ! (set +o pipefail; gzip -dc "${BACKUP_FILE}" 2>/dev/null | head -n 30) | grep -qE "(PostgreSQL database dump|SET statement_timeout|CREATE |ALTER |DROP |COPY )"; then
+ARCHIVE_MAGIC="$( (set +o pipefail; gzip -dc "${BACKUP_FILE}" 2>/dev/null | head -c 4 | od -An -tx1 | tr -d ' \n') || true )"
+if [ "${ARCHIVE_MAGIC}" = "6de29981" ]; then
+  : # mongodump archive; its structure is checked by the manifest
+elif ! (set +o pipefail; gzip -dc "${BACKUP_FILE}" 2>/dev/null | head -n 30) | grep -qE "(PostgreSQL database dump|SET statement_timeout|CREATE |ALTER |DROP |COPY )"; then
   log_error "Archive does not contain recognizable PostgreSQL dump content."
   exit 1
 fi
@@ -249,6 +252,7 @@ case "${TARGET_ENV}" in
       case "${DB_TYPE}" in
         mysql) RESTORE_IMAGE="${RESTORE_IMAGE:-mysql:8.4}" ;;
         mariadb) RESTORE_IMAGE="${RESTORE_IMAGE:-mariadb:11}" ;;
+        mongodb|mongo) RESTORE_IMAGE="${RESTORE_IMAGE:-mongo:7}" ;;
         *) RESTORE_IMAGE="${RESTORE_IMAGE:-postgres:16-alpine}" ;;
       esac
     fi
@@ -311,8 +315,65 @@ PYEOF
 
     case "${DB_TYPE}" in
       mysql|mariadb) ENGINE="mysql" ;;
+      mongodb|mongo) ENGINE="mongo" ;;
       *) ENGINE="postgres" ;;
     esac
+
+    # MongoDB: no SQL, so it has its own short path. Same image as production,
+    # no auth on the throwaway server, archive restored with mongorestore and
+    # every collection counted with mongosh (or the legacy mongo shell).
+    if [ "${ENGINE}" = "mongo" ]; then
+      MONGO_SHELL='if command -v mongosh >/dev/null 2>&1; then s=mongosh; else s=mongo; fi'
+      log_info "Spawning temporary MongoDB container from ${RESTORE_IMAGE}..."
+      if ! docker run -d --name "${TEMP_NAME}" -e ALLOW_EMPTY_PASSWORD=yes "${RESTORE_IMAGE}" >/dev/null; then
+        drill_failed "Could not start a temporary database from image ${RESTORE_IMAGE}."
+      fi
+      log_info "Waiting for temporary database to accept connections..."
+      for ((i = 1; i <= 90; i++)); do
+        if docker exec "${TEMP_NAME}" sh -c "${MONGO_SHELL}"'; exec "$s" --quiet --eval "db.runCommand({ping: 1}).ok"' 2>/dev/null | grep -q 1; then
+          break
+        fi
+        sleep 1
+        if [ "$i" -eq 90 ]; then
+          drill_failed "Temporary database did not accept connections within 90 seconds."
+        fi
+      done
+
+      MANIFEST="${BACKUP_FILE}.manifest.json"
+      if [ ! -f "${MANIFEST}" ]; then
+        MANIFEST="${DRILL_WORK}/manifest.json"
+        if ! python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" manifest "${BACKUP_FILE}" > "${MANIFEST}"; then
+          drill_failed "Could not read collections from the archive (truncated or unreadable)."
+        fi
+      fi
+
+      log_info "Restoring archive into test database (mongorestore)..."
+      # Application databases only: admin (users, roles, auth schema) belongs
+      # to the server and cannot be merged into a fresh one; it is in the
+      # archive and restored in a real recovery.
+      if ! gzip -dc "${BACKUP_FILE}" | docker exec -i "${TEMP_NAME}" mongorestore --archive --nsExclude='admin.*' --nsExclude='config.*' > "${DRILL_WORK}/restore.log" 2>&1 \
+        || grep -q "Failed:" "${DRILL_WORK}/restore.log"; then
+        tail -n 5 "${DRILL_WORK}/restore.log" >&2 || true
+        drill_failed "mongorestore failed: $(grep -m1 -iE 'Failed:|error' "${DRILL_WORK}/restore.log" | sed 's/^[0-9T:.+-]*[[:space:]]*//' | cut -c1-200 || echo 'see log')"
+      fi
+      log_pass "Archive restored without errors."
+
+      log_info "Verifying every collection's document count against the backup manifest..."
+      python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" count-sql "${MANIFEST}" > "${DRILL_WORK}/count.js"
+      if ! docker exec -i "${TEMP_NAME}" sh -c 'cat > /tmp/atlas-count.js; '"${MONGO_SHELL}"'; exec "$s" --quiet /tmp/atlas-count.js' \
+        < "${DRILL_WORK}/count.js" > "${DRILL_WORK}/counts.tsv" 2> "${DRILL_WORK}/count.err"; then
+        drill_failed "Could not count restored collections: $(head -c 200 "${DRILL_WORK}/count.err")"
+      fi
+      if ! python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" compare "${MANIFEST}" "${DRILL_WORK}/counts.tsv" > "${DRILL_WORK}/verify.json"; then
+        MISMATCH="$(python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" summary "${DRILL_WORK}/verify.json" 2>/dev/null || echo "document counts differ")"
+        drill_failed "Restored data does not match the backup: ${MISMATCH}" "${DRILL_WORK}/verify.json"
+      fi
+      SUMMARY="$(python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" summary "${DRILL_WORK}/verify.json")"
+      record_drill true "" "${DRILL_WORK}/verify.json"
+      log_pass "Verified ${SUMMARY} match the backup."
+      log_success "RESTORE DRILL PASSED for '${APP_TARGET}' ($(( $(date +%s) - DRILL_STARTED ))s)."
+      exit 0
+    fi
 
     # Engine-specific client inside the throwaway container. The password comes
     # from the container's own environment, never the host command line.
@@ -441,6 +502,29 @@ PYEOF
           exec "$c" -u"$user" --default-character-set=utf8mb4 "$db"
         ' _ "${DB_USER}" "${DB_NAME}" || {
             log_error "Production database restore failed during SQL execution!"
+            send_atlas_notification "CRITICAL" "Production Database Restore Failed" "Application: \`${APP_TARGET}\`\nContainer: \`${PROD_CONTAINER}\`\nArchive: \`$(basename "${BACKUP_FILE}")\`\nError: Production restore failed on host \`$(hostname)\`." || true
+            exit 1
+          }
+        ;;
+      mongodb|mongo)
+        # --drop replaces each collection in the archive with its backed-up
+        # contents; collections not in the archive are left alone. Credentials
+        # are read inside the container and passed in a private config file.
+        gzip -dc "${BACKUP_FILE}" | docker exec -i "${PROD_CONTAINER}" sh -c '
+          user="${MONGO_INITDB_ROOT_USERNAME:-${MONGODB_ROOT_USER:-}}"
+          pw="${MONGO_INITDB_ROOT_PASSWORD:-${MONGODB_ROOT_PASSWORD:-}}"
+          if [ -z "$user" ] && [ -n "${MONGODB_ROOT_PASSWORD:-}" ]; then user=root; fi
+          set -- --archive --drop
+          if [ -n "$user" ]; then
+            cfg="$(mktemp)"; chmod 600 "$cfg"
+            esc="$(printf %s "$pw" | sed -e "s/[\\\\\"]/\\\\&/g")"
+            printf "password: \"%s\"\n" "$esc" > "$cfg"
+            mongorestore "$@" --username="$user" --authenticationDatabase=admin --config="$cfg"; rc=$?
+            rm -f "$cfg"; exit $rc
+          fi
+          exec mongorestore "$@"
+        ' || {
+            log_error "Production database restore failed during mongorestore!"
             send_atlas_notification "CRITICAL" "Production Database Restore Failed" "Application: \`${APP_TARGET}\`\nContainer: \`${PROD_CONTAINER}\`\nArchive: \`$(basename "${BACKUP_FILE}")\`\nError: Production restore failed on host \`$(hostname)\`." || true
             exit 1
           }
