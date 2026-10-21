@@ -19,6 +19,7 @@ export interface DrillResult {
   reason?: string;
   tables?: number;
   rows?: number;
+  files?: number;
 }
 
 // A daily drill plus a day of slack before the last proof counts as stale.
@@ -26,6 +27,9 @@ export const DRILL_STALE_HOURS = 48;
 
 export interface ChainOptions {
   drillsScheduled?: boolean;
+  // "files" chains describe volume and directory archives, which run daily by default.
+  kind?: "database" | "files";
+  lateAfterHours?: number;
 }
 
 // The newest recorded drill across an app's backups.
@@ -36,7 +40,14 @@ export function latestRecordedDrill(backups: Backup[]): DrillResult | undefined 
     if (!d || !d.checked_at) continue;
     const at = d.checked_at * 1000;
     if (!best || at > best.at) {
-      best = { passed: d.passed, at, reason: d.reason || undefined, tables: d.tables_verified, rows: d.rows_found };
+      best = {
+        passed: d.passed,
+        at,
+        reason: d.reason || undefined,
+        tables: d.tables_verified,
+        rows: d.rows_found,
+        files: d.files_found,
+      };
     }
   }
   return best;
@@ -44,6 +55,7 @@ export function latestRecordedDrill(backups: Backup[]): DrillResult | undefined 
 
 export interface AppChain {
   app: string;
+  kind: "database" | "files";
   health: AppHealth;
   summary: string;
   newest?: Backup;
@@ -88,6 +100,9 @@ export function buildChain(
     : !sessionDrill ? recorded
     : sessionDrill.at - recorded.at > 5 * 60 * 1000 ? sessionDrill
     : recorded;
+  const kind = options.kind ?? "database";
+  const isFiles = kind === "files";
+  const lateAfter = options.lateAfterHours ?? LATE_AFTER_HOURS;
   const sorted = [...backups].sort((a, b) => backupTime(b) - backupTime(a));
   const newest = sorted[0];
   const newestSynced = sorted.find((b) => b.synced);
@@ -95,8 +110,11 @@ export function buildChain(
   if (!newest) {
     return {
       app,
+      kind,
       health: "no-backups",
-      summary: "No backups yet. Run a backup to start the chain.",
+      summary: isFiles
+        ? "No file backups yet. They run with the next scheduled backup."
+        : "No backups yet. Run a backup to start the chain.",
       links: [
         { key: "dumped", label: "Dumped", state: "broken", detail: "No backup files found" },
         { key: "checksum", label: "Checksummed", state: "unknown", detail: "Waiting for a backup" },
@@ -108,16 +126,21 @@ export function buildChain(
   }
 
   const age = now - backupTime(newest);
-  const late = age > LATE_AFTER_HOURS * 3600 * 1000;
+  const late = age > lateAfter * 3600 * 1000;
 
   const links: ChainLink[] = [
     {
       key: "dumped",
-      label: "Dumped",
+      label: isFiles ? "Archived" : "Dumped",
       state: late ? "warn" : "ok",
       detail: late
-        ? `Last backup ${ago(backupTime(newest), now)}, later than the 6-hour schedule`
-        : [ago(backupTime(newest), now), newest.size_human, newest.contents ? `${newest.contents.tables} tables` : ""]
+        ? `Last backup ${ago(backupTime(newest), now)}, later than its schedule`
+        : [
+            ago(backupTime(newest), now),
+            newest.size_human,
+            newest.contents ? `${newest.contents.tables} table${newest.contents.tables === 1 ? "" : "s"}` : "",
+            newest.files ? `${newest.files.files.toLocaleString("en-US")} files` : "",
+          ]
             .filter(Boolean)
             .join(", "),
     },
@@ -158,7 +181,24 @@ export function buildChain(
     summary = "Only local copies exist. If this server is lost, this app's data is lost.";
   }
 
-  return { app, health, summary, newest, newestSynced, links };
+  return { app, kind, health, summary, newest, newestSynced, links };
+}
+
+const SEVERITY: Record<AppHealth, number> = {
+  unprotected: 0,
+  "drill-failed": 1,
+  "no-backups": 2,
+  "at-risk": 3,
+  recoverable: 4,
+};
+
+export function severity(health: AppHealth): number {
+  return SEVERITY[health];
+}
+
+// An app is only as recoverable as the weakest of its database and files.
+export function worstChain(chains: AppChain[]): AppChain {
+  return chains.reduce((worst, c) => (SEVERITY[c.health] < SEVERITY[worst.health] ? c : worst));
 }
 
 function offsiteLink(newest: Backup, newestSynced: Backup | undefined, now: number): ChainLink {
@@ -191,8 +231,10 @@ function drillLink(drill: DrillResult | undefined, now: number, options: ChainOp
   }
   const proof =
     drill.tables !== undefined && drill.rows !== undefined
-      ? `${drill.tables} tables, ${drill.rows.toLocaleString("en-US")} rows verified`
-      : "Restore verified";
+      ? `${drill.tables} table${drill.tables === 1 ? "" : "s"}, ${drill.rows.toLocaleString("en-US")} rows verified`
+      : drill.files !== undefined
+        ? `${drill.files.toLocaleString("en-US")} files verified`
+        : "Restore verified";
   const stale = now - drill.at > DRILL_STALE_HOURS * 3600 * 1000;
   return {
     key: "drill",
