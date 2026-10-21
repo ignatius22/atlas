@@ -32,7 +32,15 @@ ENGINE_PATTERNS = [
 ]
 DB_DATA_PATHS = ("/var/lib/postgresql", "/var/lib/mysql", "/bitnami/postgresql", "/bitnami/mysql", "/bitnami/mariadb")
 SKIP_BIND_PREFIXES = ("/var/run", "/run", "/etc", "/proc", "/sys", "/dev", "/tmp", "/usr", "/lib", "/bin", "/sbin")
-NOISE_VOLUME = re.compile(r"(^|[_-])(cache|tmp|temp|logs?|node_modules|redis|rabbitmq|letsencrypt|certs?)([_-]|$)", re.I)
+NOISE_VOLUME = re.compile(
+    r"(^|[_-])(cache|tmp|temp|logs?|node_modules|letsencrypt|certbot|certs?)([_-]|$)"
+    # Queues and caches rebuild themselves and their files change while running:
+    # redis_data, redisdata, valkey-data, rabbitmq ...
+    r"|redis|valkey|keydb|rabbitmq|memcache",
+    re.I,
+)
+# Host folders that are regenerated, not app data (ACME challenge webroots, certificates).
+NOISE_PATH = re.compile(r"(^|/)(certbot|letsencrypt|acme(-challenge)?)(/|$)", re.I)
 
 
 def docker(*args):
@@ -126,7 +134,7 @@ def propose(containers):
                         volumes.append(name)
                 elif m.get("Type") == "bind":
                     src = m.get("Source", "")
-                    if not src.startswith("/") or src.startswith(SKIP_BIND_PREFIXES) or "docker.sock" in src:
+                    if not src.startswith("/") or src.startswith(SKIP_BIND_PREFIXES) or "docker.sock" in src or NOISE_PATH.search(src):
                         continue
                     if not os.path.isdir(src) or src in paths:
                         continue
