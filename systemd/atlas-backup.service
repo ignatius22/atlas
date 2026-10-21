@@ -12,7 +12,10 @@ WorkingDirectory=/opt/atlas
 EnvironmentFile=-/opt/atlas/.env
 # Sync runs even if one app's backup failed, so a single stopped container
 # never blocks the other apps' backups from reaching offsite storage.
-ExecStart=/bin/bash -c 'rc=0; /opt/atlas/scripts/backup.sh --all || rc=1; /opt/atlas/scripts/sync-offsite.sh --all || rc=1; exit $rc'
+# Afterwards a status report goes to ATLAS_HEARTBEAT_URL (if set) so an external
+# watchdog notices both failures and silence. systemd expands $VAR itself, so
+# the shell variable is written $$rc.
+ExecStart=/bin/bash -c 'rc=0; /opt/atlas/scripts/backup.sh --all || rc=1; /opt/atlas/scripts/sync-offsite.sh --all || rc=1; python3 /opt/atlas/scripts/lib/heartbeat.py send --event backup --exit-code $$rc; exit $$rc'
 StandardOutput=journal
 StandardError=journal
 
