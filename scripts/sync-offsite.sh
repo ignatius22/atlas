@@ -234,6 +234,12 @@ EOF_META
     fi
   fi
 
+  # rclone checks each object with a HEAD after uploading it. Older rclone (1.60, the
+  # Ubuntu package) adds ?versionId= to that HEAD, which Cloudflare R2 answers with
+  # 501 Not Implemented, so every upload "failed" once and was retried. Skip that
+  # HEAD: the object's size and checksum are verified below, independently.
+  local RCLONE_UPLOAD_FLAGS=(--s3-no-check-bucket --s3-no-head)
+
   # Step 4 & 5: Upload to Cloud Object Storage with Bounded Retry (Max 3 attempts, exponential backoff)
   local max_attempts=3
   local attempt=1
@@ -275,18 +281,18 @@ EOF_META
           break
         fi
         
-        if ! rclone copyto "${encrypted_file}" ":s3:${bucket}/${remote_prefix}/${remote_enc_name}" --s3-no-check-bucket; then
+        if ! rclone copyto "${encrypted_file}" ":s3:${bucket}/${remote_prefix}/${remote_enc_name}" "${RCLONE_UPLOAD_FLAGS[@]}"; then
           log_warn "rclone upload failed for ${remote_enc_name} (attempt ${attempt}/${max_attempts})"
           upload_ok=false
         fi
         if [ "${upload_ok}" = "true" ] && [ -f "${encrypted_file}.sha256" ]; then
-          if ! rclone copyto "${encrypted_file}.sha256" ":s3:${bucket}/${remote_prefix}/${remote_enc_name}.sha256" --s3-no-check-bucket; then
+          if ! rclone copyto "${encrypted_file}.sha256" ":s3:${bucket}/${remote_prefix}/${remote_enc_name}.sha256" "${RCLONE_UPLOAD_FLAGS[@]}"; then
             log_warn "rclone checksum upload failed (attempt ${attempt}/${max_attempts})"
             upload_ok=false
           fi
         fi
         if [ "${upload_ok}" = "true" ]; then
-          if ! rclone copyto "${manifest_file}" ":s3:${bucket}/${remote_prefix}/$(basename "${manifest_file}")" --s3-no-check-bucket; then
+          if ! rclone copyto "${manifest_file}" ":s3:${bucket}/${remote_prefix}/$(basename "${manifest_file}")" "${RCLONE_UPLOAD_FLAGS[@]}"; then
             log_warn "rclone manifest upload failed (attempt ${attempt}/${max_attempts})"
             upload_ok=false
           fi
