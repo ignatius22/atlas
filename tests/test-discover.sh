@@ -107,6 +107,16 @@ else
   fail "Backup copy or idempotence"
 fi
 
+# A configured app without a files section gets a ready-to-paste suggestion.
+printf 'apps:\n  %s-blog:\n    database: {type: postgres, container: %s_db}\n' "${T}" "${T}" > "${WORK}/nofiles.yml"
+if python3 -I "${DISCOVER}" --config "${WORK}/nofiles.yml" > "${WORK}/hint.txt" \
+  && grep -q "its files are not backed up" "${WORK}/hint.txt" && grep -q "\"${T}_uploads\"" "${WORK}/hint.txt" \
+  && cmp -s "${WORK}/nofiles.yml" <(printf 'apps:\n  %s-blog:\n    database: {type: postgres, container: %s_db}\n' "${T}" "${T}"); then
+  pass "Configured apps missing a files section get a files block to paste, and the config is left untouched"
+else
+  fail "Files suggestion for configured app: $(cat "${WORK}/hint.txt")"
+fi
+
 if [ -w /var/backups ] || mkdir -p /var/backups 2> /dev/null; then
   if ATLAS_LOCK_DIR="${WORK}" "${ATLAS_ROOT}/scripts/backup.sh" --app="${T}-blog" --skip-files --config="${WORK}/apps.yml" > "${WORK}/b.log" 2>&1; then
     pass "backup.sh backs up the discovered app with no manual edits"
