@@ -118,6 +118,28 @@ else
   fail "Heartbeat failure isolation"
 fi
 
+# 5. Only configured apps are reported: an old folder is ignored, a configured app with no backups is a problem
+printf 'apps:\n  good: {database: {type: postgres, container: x}}\n  newapp: {database: {type: postgres, container: y}}\n  nodb: {name: static site}\n' > "${WORK}/apps.yml"
+if ATLAS_BACKUP_DIR="${BK}" ATLAS_CONFIG_FILE="${WORK}/apps.yml" python3 -I "${HB}" report | python3 -I -c '
+import json, sys
+r = json.load(sys.stdin)
+names = [a["app"] for a in r["apps"]]
+assert names == ["good", "newapp"], names
+assert r["problems"] == ["newapp: configured but has no backups yet"], r["problems"]
+'; then
+  pass "Reports only configured apps: old backup folders are ignored, a configured app with no backups is flagged"
+else
+  fail "Configured-apps filtering"
+fi
+
+# 6. A mistyped URL is explained, not sent
+if ATLAS_BACKUP_DIR="${BK}" ATLAS_HEARTBEAT_URL="https://https://hc-ping.com/abc" python3 -I "${HB}" send > "${WORK}/out3" 2>&1 \
+  && grep -q "looks wrong" "${WORK}/out3"; then
+  pass "A doubled https:// in the URL is caught with a clear message"
+else
+  fail "Malformed URL: $(cat "${WORK}/out3")"
+fi
+
 printf "\n\033[1mHeartbeat Tests Summary: %d passed, %d failed\033[0m\n" "${PASSED}" "${FAILED}"
 if [ "${FAILED}" -gt 0 ]; then exit 1; fi
 exit 0
