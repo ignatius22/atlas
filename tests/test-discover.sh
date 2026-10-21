@@ -118,6 +118,11 @@ else
 fi
 
 if [ -w /var/backups ] || mkdir -p /var/backups 2> /dev/null; then
+  # Wait until Postgres has finished initialising and created the database.
+  for _ in $(seq 60); do
+    docker exec "${T}_db" psql -h 127.0.0.1 -U blogger -d blogdb -c 'SELECT 1' > /dev/null 2>&1 && break
+    sleep 1
+  done
   if ATLAS_LOCK_DIR="${WORK}" "${ATLAS_ROOT}/scripts/backup.sh" --app="${T}-blog" --skip-files --config="${WORK}/apps.yml" > "${WORK}/b.log" 2>&1; then
     pass "backup.sh backs up the discovered app with no manual edits"
   else
