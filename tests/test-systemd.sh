@@ -68,7 +68,10 @@ assert_true "[ -f '${TIMER_FILE}' ]" "systemd/atlas-backup.timer file exists in 
 assert_file_contains "${SERVICE_FILE}" "^Type=oneshot" "Service Type is oneshot"
 assert_file_contains "${SERVICE_FILE}" "^User=root" "Service runs as User=root"
 assert_file_contains "${SERVICE_FILE}" "^EnvironmentFile=-/opt/atlas/\.env" "Service loads .env safely via EnvironmentFile="
-assert_file_contains "${SERVICE_FILE}" "ExecStart=.*backup\.sh --all \|\| rc=1; .*sync-offsite\.sh --all \|\| rc=1; exit" "ExecStart runs sync-offsite.sh --all even if a backup fails, and still reports failure"
+assert_file_contains "${SERVICE_FILE}" "ExecStart=.*backup\.sh --all \|\| rc=1; .*sync-offsite\.sh --all \|\| rc=1;.*exit \\\$\\\$rc'" "ExecStart runs sync-offsite.sh --all even if a backup fails, and still reports failure"
+# systemd expands \$VAR in ExecStart: a shell variable must be written \$\$ or it silently becomes empty.
+assert_file_not_contains "${SERVICE_FILE}" "[^\$]\\\$rc" "Backup service escapes shell variables for systemd (\$\$rc)"
+assert_file_contains "${SERVICE_FILE}" "heartbeat\.py send --event backup --exit-code \\\$\\\$rc" "Backup service sends a heartbeat with the run's exit code"
 assert_file_contains "${SERVICE_FILE}" "^StandardOutput=journal" "StandardOutput sends to journald"
 assert_file_contains "${SERVICE_FILE}" "^StandardError=journal" "StandardError sends to journald"
 
@@ -103,7 +106,9 @@ assert_file_not_contains "${TIMER_FILE}" "^Requires=" "Backup timer does not sta
 DRILL_SERVICE="${ATLAS_ROOT}/systemd/atlas-drill.service"
 DRILL_TIMER="${ATLAS_ROOT}/systemd/atlas-drill.timer"
 assert_true "[ -f '${DRILL_SERVICE}' ] && [ -f '${DRILL_TIMER}' ]" "systemd/atlas-drill.service and .timer exist in repository"
-assert_file_contains "${DRILL_SERVICE}" "^ExecStart=/opt/atlas/scripts/drill\.sh --all" "Drill service runs drill.sh --all"
+assert_file_contains "${DRILL_SERVICE}" "^ExecStart=.*/opt/atlas/scripts/drill\.sh --all" "Drill service runs drill.sh --all"
+assert_file_not_contains "${DRILL_SERVICE}" "[^\$]\\\$rc" "Drill service escapes shell variables for systemd (\$\$rc)"
+assert_file_contains "${DRILL_SERVICE}" "heartbeat\.py send --event drill" "Drill service sends a heartbeat"
 assert_file_contains "${DRILL_SERVICE}" "^Type=oneshot" "Drill service is oneshot"
 assert_file_contains "${DRILL_TIMER}" "Persistent=true" "Drill timer catches up after downtime"
 assert_file_contains "${DRILL_TIMER}" "^OnCalendar=" "Drill timer has a daily schedule"
