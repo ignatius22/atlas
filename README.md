@@ -186,7 +186,7 @@ infra-prod/
 atlas discover           # proposes apps.yml entries from running containers
 atlas discover --write   # adds them to config/apps.yml (a backup copy is kept)
 ```
-Containers are grouped by Docker Compose project (Coolify and Dokploy use Compose too). For each project Atlas proposes the PostgreSQL, MySQL or MariaDB container with its database name and user, plus the upload volumes and storage folders mounted by the app's other containers. Database data volumes, caches and the Docker socket are left out, and passwords are never read or printed. Apps already in your config are never changed.
+Containers are grouped by Docker Compose project (Coolify and Dokploy use Compose too). For each project Atlas proposes the PostgreSQL, MySQL or MariaDB container with its database name and user, plus the upload volumes and storage folders mounted by the app's other containers. Database data volumes, caches and the Docker socket are left out, and passwords are never read or printed. Apps already in your config are never changed; if one has upload volumes but no `files:` section, discover prints the block to paste.
 
 ### 1b. Run the Diagnostic Doctor
 ```bash

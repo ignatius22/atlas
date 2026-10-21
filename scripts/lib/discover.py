@@ -205,8 +205,12 @@ def insert_into_apps_block(text, snippet):
 
 
 def existing_apps(config):
+    return set(load_config_apps(config))
+
+
+def load_config_apps(config):
     if not config or not os.path.exists(config):
-        return set()
+        return {}
     vendor = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor")
     if os.path.isdir(vendor):
         sys.path.append(vendor)
@@ -214,7 +218,8 @@ def existing_apps(config):
 
     with open(config, encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
-    return set((data.get("apps") or {}).keys())
+    apps = data.get("apps") or {}
+    return apps if isinstance(apps, dict) else {}
 
 
 def main(argv):
@@ -241,18 +246,30 @@ def main(argv):
         sys.stderr.write(f"discover: cannot read containers: {exc}\n")
         return 1
 
-    known = existing_apps(config)
+    config_apps = load_config_apps(config)
+    known = set(config_apps)
     new = {k: v for k, v in proposed.items() if k not in known}
+    # Configured apps with discovered volumes/folders but no files section yet.
+    files_hints = {
+        k: v["files"] for k, v in proposed.items()
+        if k in known and "files" in v and not (isinstance(config_apps.get(k), dict) and config_apps[k].get("files"))
+    }
 
     if as_json:
-        print(json.dumps({"new": new, "already_configured": sorted(set(proposed) & known)}, indent=2))
+        print(json.dumps({"new": new, "already_configured": sorted(set(proposed) & known), "files_hints": files_hints}, indent=2))
         return 0
 
     if not proposed:
         print("# No database containers or app volumes found among running containers.")
         return 0
     for name in sorted(set(proposed) & known):
-        print(f"# {name}: already in {config}, left unchanged")
+        if name in files_hints:
+            print(f"# {name}: already configured, but its files are not backed up. Add under apps.{name}:")
+            hint = {name: {"name": name, "files": files_hints[name]}}
+            body = to_yaml(hint).splitlines()
+            print("\n".join(line for line in body if line.strip().startswith(("files:", "volumes:", "paths:", "- "))))
+        else:
+            print(f"# {name}: already in {config}, left unchanged")
     if not new:
         print("# Nothing new to add.")
         return 0
