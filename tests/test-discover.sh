@@ -42,9 +42,15 @@ server = {"Name": "/shop_db", "Config": {"Image": "postgres:16", "Labels": lbl, 
 apps = d.propose([tool, server])
 assert apps["shop"]["database"]["container"] == "shop_db", apps
 assert apps["shop"]["database"]["name"] == "shopdb", apps
+for noisy in ("experimentlab_experimentlab_redisdata", "app_redis_data", "app-valkey", "app_rabbitmq"):
+    assert d.NOISE_VOLUME.search(noisy), noisy
+for kept in ("catalogflow_uploads_data", "catalogflow_renders_data", "app_storage"):
+    assert not d.NOISE_VOLUME.search(kept), kept
+assert d.NOISE_PATH.search("/var/www/certbot") and d.NOISE_PATH.search("/etc2/letsencrypt/live")
+assert not d.NOISE_PATH.search("/var/www/catalogflow/storage")
 PY
 then
-  pass "Picks the container that owns the database data when several use a database image"
+  pass "Picks the container that owns the database data; skips Redis/queue volumes and certbot folders"
 else
   fail "Database container choice"
 fi
