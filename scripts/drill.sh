@@ -68,12 +68,9 @@ fi
 check_pyyaml_dependency
 require_cmd docker
 
-# One drill at a time. The kernel releases the lock if this process dies.
-LOCK_DIR="${ATLAS_LOCK_DIR:-/run/atlas}"
-mkdir -p "${LOCK_DIR}" 2>/dev/null || LOCK_DIR="/tmp"
-exec 202> "${LOCK_DIR}/drill.lock"
-if ! flock -n 202; then
-  log_error "Another restore drill is already running. Exiting."
+# One drill at a time (kernel lock: released automatically if this process dies)
+if ! acquire_atlas_lock drill; then
+  log_error "Another restore drill is already running (lock: ${ATLAS_LOCK_FILE}). Exiting."
   exit 1
 fi
 
