@@ -4,6 +4,8 @@ All notable changes to Atlas will be documented in this file.
 
 ## [Unreleased]
 ### Added
+- MySQL and MariaDB support (`database.type: mysql` or `mariadb`). Dumps use `--single-transaction` with routines, triggers and events, and read passwords from the container's own environment. The manifest counts rows per table from the dump's INSERT statements (single-line MySQL and multi-line MariaDB formats) and rejects dumps missing the `-- Dump completed` footer. Restore drills run on the production container's image and verify every table; production restores are supported.
+- Test-restore containers are checked for readiness over TCP, so a database's temporary init server is never mistaken for the real one.
 - File and Docker volume backups. Configure `files.volumes`, `files.paths` and `files.exclude` per app; Atlas writes `<app>-files-<timestamp>.tar.gz` with a manifest (file count, bytes, digest over every file's SHA-256), runs it daily by default (`files.every_hours`), and sends it through the same encryption, offsite confirmation and retention gate as database dumps. Apps without a database are supported.
 - The nightly drill verifies files archives by reading every file and comparing with the manifest. `atlas restore files <app> --to=DIR` restores into a new directory and never overwrites live data.
 - Dashboard shows a separate "Files and volumes" chain per app; an app is rated by the weaker of its database and files. New `/api/files` endpoint; `/api/status` reports which apps have a database.
