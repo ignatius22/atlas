@@ -327,7 +327,7 @@ summary() {
   printf "\n%sAtlas is installed.%s %s app(s) configured" "${B}" "${N}" "${apps}"
   case "${DRILL_RESULT:-}" in
     passed) printf ", and the first restore drill %spassed%s (%s verified).\n" "${G}" "${N}" "$([ "${DRILL_PASSED}" = 1 ] && echo "1 backup" || echo "${DRILL_PASSED} backups")" ;;
-    backup-failed) printf ", but the first backup %sfailed%s. Fix the error above, then run: atlas backup --all\n" "${R}" "${N}" ;;
+    backup-failed) printf ", but the first backup %sfailed%s. Fix the error above, then run: atlas backup create --all\n" "${R}" "${N}" ;;
     failed) printf ", but the first restore drill %sfailed%s. Details: atlas restore drill\n" "${R}" "${N}" ;;
     *) printf ".\n" ;;
   esac
