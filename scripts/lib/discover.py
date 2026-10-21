@@ -4,7 +4,7 @@ atlas discover: propose apps.yml entries from the containers running on this hos
 
 Groups containers by Docker Compose project (Coolify and Dokploy deploy with
 Compose too). For each project it proposes:
-  database   the PostgreSQL / MySQL / MariaDB container, with database name and
+  database   the PostgreSQL / MySQL / MariaDB / MongoDB container, with database name and
              user read from its environment (passwords are never read or printed)
   files      named volumes and host folders mounted by the project's other
              containers (user uploads, storage), excluding the database's own
@@ -29,8 +29,13 @@ ENGINE_PATTERNS = [
     ("mariadb", re.compile(r"(^|/)mariadb(:|$)|mariadb")),
     ("mysql", re.compile(r"(^|/)(mysql|percona)(-server)?(:|$)|mysql")),
     ("postgres", re.compile(r"postgres|postgis|timescaledb|pgvector|(^|/)supabase/postgres")),
+    # The server images only: not mongo-express or other tools named after it.
+    ("mongodb", re.compile(r"(^|/)(mongo|mongodb|mongodb-community-server|mongodb-enterprise-server|percona-server-mongodb)(:|@|$)")),
 ]
-DB_DATA_PATHS = ("/var/lib/postgresql", "/var/lib/mysql", "/bitnami/postgresql", "/bitnami/mysql", "/bitnami/mariadb")
+DB_DATA_PATHS = (
+    "/var/lib/postgresql", "/var/lib/mysql", "/bitnami/postgresql", "/bitnami/mysql", "/bitnami/mariadb",
+    "/data/db", "/data/configdb", "/bitnami/mongodb",
+)
 SKIP_BIND_PREFIXES = ("/var/run", "/run", "/etc", "/proc", "/sys", "/dev", "/tmp", "/usr", "/lib", "/bin", "/sbin")
 NOISE_VOLUME = re.compile(
     r"(^|[_-])(cache|tmp|temp|logs?|node_modules|letsencrypt|certbot|certs?)([_-]|$)"
@@ -77,7 +82,7 @@ def db_server_score(c):
     score = 0
     if any((m.get("Destination") or "").startswith(DB_DATA_PATHS) for m in c.get("Mounts") or []):
         score += 2
-    if any(k.startswith(("POSTGRES_", "MYSQL_", "MARIADB_")) for k in env_map(c)):
+    if any(k.startswith(("POSTGRES_", "MYSQL_", "MARIADB_", "MONGO_INITDB_", "MONGODB_")) for k in env_map(c)):
         score += 1
     return score
 
@@ -151,7 +156,9 @@ def propose(containers):
             c, engine = db
             env = env_map(c)
             entry = {"type": engine, "container": c.get("Name", "").lstrip("/"), "backup": True}
-            if engine == "postgres":
+            if engine == "mongodb":
+                pass  # every database is dumped; credentials are read inside the container
+            elif engine == "postgres":
                 user = env.get("POSTGRES_USER") or "postgres"
                 entry["user"] = user
                 entry["name"] = env.get("POSTGRES_DB") or user
