@@ -37,7 +37,7 @@ export interface Backup {
   has_age: boolean;
   age_size_bytes: number;
   synced?: boolean;
-  contents?: { tables: number; rows: number } | null;
+  contents?: { tables: number; rows: number; engine?: string | null } | null;
   // Files archives only: what the archive holds.
   files?: { files: number; bytes: number; sources: { kind: "volume" | "path"; name: string; files: number }[] } | null;
   drill?: RecordedDrill | null;
@@ -53,6 +53,7 @@ export interface RecordedDrill {
   tables_verified?: number;
   tables_expected?: number;
   rows_found?: number;
+  engine?: string | null;
   files_found?: number;
   bytes_found?: number;
   image?: string;

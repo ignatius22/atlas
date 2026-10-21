@@ -20,6 +20,16 @@ export interface DrillResult {
   tables?: number;
   rows?: number;
   files?: number;
+  engine?: string | null;
+}
+
+// MongoDB stores collections of documents; SQL databases tables of rows.
+export function unitWords(engine?: string | null): { table: string; row: string } {
+  return engine === "mongodb" ? { table: "collection", row: "document" } : { table: "table", row: "row" };
+}
+
+function plural(n: number, word: string): string {
+  return `${n.toLocaleString("en-US")} ${word}${n === 1 ? "" : "s"}`;
 }
 
 // A daily drill plus a day of slack before the last proof counts as stale.
@@ -47,6 +57,7 @@ export function latestRecordedDrill(backups: Backup[]): DrillResult | undefined 
         tables: d.tables_verified,
         rows: d.rows_found,
         files: d.files_found,
+        engine: d.engine,
       };
     }
   }
@@ -138,7 +149,7 @@ export function buildChain(
         : [
             ago(backupTime(newest), now),
             newest.size_human,
-            newest.contents ? `${newest.contents.tables} table${newest.contents.tables === 1 ? "" : "s"}` : "",
+            newest.contents ? plural(newest.contents.tables, unitWords(newest.contents.engine).table) : "",
             newest.files ? `${newest.files.files.toLocaleString("en-US")} files` : "",
           ]
             .filter(Boolean)
@@ -231,7 +242,7 @@ function drillLink(drill: DrillResult | undefined, now: number, options: ChainOp
   }
   const proof =
     drill.tables !== undefined && drill.rows !== undefined
-      ? `${drill.tables} table${drill.tables === 1 ? "" : "s"}, ${drill.rows.toLocaleString("en-US")} rows verified`
+      ? `${plural(drill.tables, unitWords(drill.engine).table)}, ${plural(drill.rows, unitWords(drill.engine).row)} verified`
       : drill.files !== undefined
         ? `${drill.files.toLocaleString("en-US")} files verified`
         : "Restore verified";

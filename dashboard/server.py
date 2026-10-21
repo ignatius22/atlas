@@ -340,7 +340,7 @@ def get_backups_list():
                 if manifest_file.exists():
                     try:
                         m = json.loads(manifest_file.read_text())
-                        contents = {"tables": m.get("table_count"), "rows": m.get("total_rows")}
+                        contents = {"tables": m.get("table_count"), "rows": m.get("total_rows"), "engine": m.get("engine")}
                     except Exception:
                         contents = None
 
@@ -356,6 +356,7 @@ def get_backups_list():
                             "tables_verified": d.get("tables_verified"),
                             "tables_expected": d.get("tables_expected"),
                             "rows_found": d.get("rows_found"),
+                            "engine": d.get("engine"),
                             "image": d.get("image"),
                         }
                     except Exception:

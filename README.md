@@ -1,6 +1,6 @@
 # Atlas Infrastructure & Disaster Recovery Framework (v1.1.0)
 
-Atlas is a resilient, application-agnostic infrastructure, disaster recovery, and operational framework for Linux Virtual Private Servers (VPS). It backs up PostgreSQL, MySQL and MariaDB databases plus Docker volumes and app files, and proves every backup restores. Built with boring, auditable technology—Bash, Docker Compose, Nginx, and Python—Atlas provides hardened deployment pipelines, automated snapshotting, asymmetric zero-knowledge offsite replication, and automated recovery verification without introducing heavyweight cluster orchestrators.
+Atlas is a resilient, application-agnostic infrastructure, disaster recovery, and operational framework for Linux Virtual Private Servers (VPS). It backs up PostgreSQL, MySQL, MariaDB and MongoDB databases plus Docker volumes and app files, and proves every backup restores. Built with boring, auditable technology—Bash, Docker Compose, Nginx, and Python—Atlas provides hardened deployment pipelines, automated snapshotting, asymmetric zero-knowledge offsite replication, and automated recovery verification without introducing heavyweight cluster orchestrators.
 
 ---
 
@@ -63,7 +63,7 @@ Atlas enforces five non-negotiable safety invariants:
              ▼
       scripts/backup.sh
              │
-             ├──> Database dump (pg_dump / mariadb-dump -> .tmp)
+             ├──> Database dump (pg_dump / mariadb-dump / mongodump -> .tmp)
              ├──> Gzip compression (-9 -> .sql.gz)
              ├──> Checksum computation (SHA-256)
              └──> Metadata manifest generation (.meta.json)
@@ -202,7 +202,7 @@ infra-prod/
 atlas discover           # proposes apps.yml entries from running containers
 atlas discover --write   # adds them to config/apps.yml (a backup copy is kept)
 ```
-Containers are grouped by Docker Compose project (Coolify and Dokploy use Compose too). For each project Atlas proposes the PostgreSQL, MySQL or MariaDB container with its database name and user, plus the upload volumes and storage folders mounted by the app's other containers. Database data volumes, caches and the Docker socket are left out, and passwords are never read or printed. Apps already in your config are never changed; if one has upload volumes but no `files:` section, discover prints the block to paste.
+Containers are grouped by Docker Compose project (Coolify and Dokploy use Compose too). For each project Atlas proposes the PostgreSQL, MySQL, MariaDB or MongoDB container with its database name and user, plus the upload volumes and storage folders mounted by the app's other containers. Database data volumes, caches and the Docker socket are left out, and passwords are never read or printed. Apps already in your config are never changed; if one has upload volumes but no `files:` section, discover prints the block to paste.
 
 ### 1b. Run the Diagnostic Doctor
 ```bash

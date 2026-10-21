@@ -144,6 +144,19 @@ describe("recorded restore drills", () => {
   });
 });
 
+describe("MongoDB chains", () => {
+  it("talks about collections and documents", () => {
+    const chain = buildChain(
+      "myapp",
+      [backup({ contents: { tables: 4, rows: 1505, engine: "mongodb" }, drill: { passed: true, checked_at: NOW / 1000 - 60, reason: "", tables_verified: 4, rows_found: 1505, engine: "mongodb" } })],
+      undefined,
+      NOW,
+    );
+    expect(chain.links[0].detail).toContain("4 collections");
+    expect(chain.links.find((l) => l.key === "drill")?.detail).toContain("4 collections, 1,505 documents verified");
+  });
+});
+
 describe("files chains", () => {
   const archive = (over: Partial<Backup> = {}) =>
     backup({

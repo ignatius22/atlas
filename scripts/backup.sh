@@ -298,8 +298,39 @@ backup_single_app() {
       rm -f "${temp_target}.err"
       ;;
 
+    mongodb|mongo)
+      log_info "Executing MongoDB dump from container '${container}'..."
+      # All databases unless database.name is set. Credentials come from the
+      # image's standard variables inside the container and are passed to
+      # mongodump in a private config file, so they never appear in a process
+      # list (container processes are visible from the host).
+      if [ "${db_name}" = "null" ]; then db_name=""; fi
+      docker exec -i "${container}" sh -c '
+        db="$1"
+        user="${MONGO_INITDB_ROOT_USERNAME:-${MONGODB_ROOT_USER:-}}"
+        pw="${MONGO_INITDB_ROOT_PASSWORD:-${MONGODB_ROOT_PASSWORD:-}}"
+        if [ -z "$user" ] && [ -n "${MONGODB_ROOT_PASSWORD:-}" ]; then user=root; fi
+        set -- --archive --quiet
+        if [ -n "$db" ]; then set -- "$@" --db="$db"; fi
+        if [ -n "$user" ]; then
+          cfg="$(mktemp)"; chmod 600 "$cfg"
+          esc="$(printf %s "$pw" | sed -e "s/[\\\\\"]/\\\\&/g")"
+          printf "password: \"%s\"\n" "$esc" > "$cfg"
+          mongodump "$@" --username="$user" --authenticationDatabase=admin --config="$cfg"; rc=$?
+          rm -f "$cfg"; exit $rc
+        fi
+        exec mongodump "$@"
+      ' _ "${db_name}" 2> "${temp_target}.err" | gzip -9 > "${temp_target}" || {
+        log_error "mongodump failed for '${app}': $(grep -v '^\s*$' "${temp_target}.err" | tail -n 2 | tr '\n' ' ' | cut -c1-300)"
+        rm -f "${temp_target}.err"
+        cleanup_failed_backup
+        return 1
+      }
+      rm -f "${temp_target}.err"
+      ;;
+
     *)
-      log_error "Unsupported database type '${db_type}'. Supported: postgres, mysql, mariadb."
+      log_error "Unsupported database type '${db_type}'. Supported: postgres, mysql, mariadb, mongodb."
       return 1
       ;;
   esac
@@ -332,10 +363,11 @@ backup_single_app() {
     return 1
   fi
   
-  # Check 4: Header verification (Must contain valid PostgreSQL dump markers)
+  # Check 4: Header verification (Must contain valid dump markers). MongoDB
+  # archives are binary; their structure is checked by the manifest below.
   local sql_header
-  sql_header="$( (set +o pipefail; gzip -dc "${temp_target}" 2>/dev/null | head -n 30) || true )"
-  if ! echo "${sql_header}" | grep -qE "(PostgreSQL database dump|MySQL dump|MariaDB dump|SET statement_timeout|CREATE |ALTER |DROP |COPY )"; then
+  sql_header="$( (set +o pipefail; gzip -dc "${temp_target}" 2>/dev/null | head -c 4000) | tr -d '\0' || true )"
+  if [[ "${db_type}" != mongo* ]] && ! echo "${sql_header}" | grep -qE "(PostgreSQL database dump|MySQL dump|MariaDB dump|SET statement_timeout|CREATE |ALTER |DROP |COPY )"; then
     log_error "Backup verification failed: Archive does not contain valid SQL dump headers."
     cleanup_failed_backup
     return 1
