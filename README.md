@@ -1,6 +1,22 @@
-# Atlas Infrastructure & Disaster Recovery Framework (v1.1.0)
+# Atlas
 
-Atlas is a resilient, application-agnostic infrastructure, disaster recovery, and operational framework for Linux Virtual Private Servers (VPS). It backs up PostgreSQL, MySQL, MariaDB and MongoDB databases plus Docker volumes and app files, and proves every backup restores. Built with boring, auditable technology—Bash, Docker Compose, Nginx, and Python—Atlas provides hardened deployment pipelines, automated snapshotting, asymmetric zero-knowledge offsite replication, and automated recovery verification without introducing heavyweight cluster orchestrators.
+**Atlas proves your VPS backups restore: every day, automatically, without ever holding your keys.**
+
+Most backup jobs report "success" when they write a file, not when the file can be restored. [Coolify's own docs](https://coolify.io/docs/databases/backups) put it plainly: "A successful backup only proves that Coolify created a file." Atlas is the step after that. Every night it restores each backup into a throwaway container running your production image, and checks that every table came back with the right number of rows.
+
+```text
+$ atlas restore drill glitchtip
+  ✓ PASS Database restore executed without errors.
+  ✓ PASS Verified 317 tables, 408,434 rows match the backup.
+[SUCCESS] RESTORE DRILL PASSED for 'glitchtip' (163s).
+```
+
+- **Proof, not exit codes.** Row counts are recorded at dump time; truncated dumps are rejected; a failed drill names the table: `public.users has 1,234 rows, expected 1,300`.
+- **Your keys stay yours.** Offsite copies are encrypted on the server with your age public key. The private key is never on the server, and no local backup is deleted until its offsite copy is confirmed.
+- **It tells you when it can't tell you.** A heartbeat to healthchecks.io (or any dead-man's switch) alerts you when a backup is late, a drill fails, or the server goes quiet.
+- **Fits what you run.** PostgreSQL, MySQL, MariaDB and MongoDB, plus Docker volumes and app folders. Works next to Coolify, Dokploy or plain Docker Compose. Bash and Python you can read in an evening; no inbound ports.
+
+> **Design partners wanted.** We are looking for 10 people running real apps on a VPS to use Atlas free and tell us what breaks. We install it with you on a 30-minute call. [Open an issue titled "Design partner"](https://github.com/ignatius22/atlas/issues/new?title=Design%20partner) and we will get in touch.
 
 ---
 
