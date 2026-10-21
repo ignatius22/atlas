@@ -37,8 +37,9 @@ else
   fail "Fresh install: $(tail -n 5 "${WORK}/out1")"
 fi
 
-if [ -x "${DIR}/bin/atlas" ] && [ -L "${WORK}/bin/atlas" ] && [ -f "${WORK}/systemd/atlas-drill.timer" ]; then
-  pass "Code, atlas command and systemd units are installed"
+if [ -x "${DIR}/bin/atlas" ] && [ -L "${WORK}/bin/atlas" ] && [ -f "${WORK}/systemd/atlas-drill.timer" ] \
+  && [ ! -e "${DIR}/.git" ] && [ ! -e "${DIR}/dashboard/web/node_modules" ]; then
+  pass "Code, atlas command and systemd units are installed, without the source's git history or node_modules"
 else
   fail "Installed files missing"
 fi
