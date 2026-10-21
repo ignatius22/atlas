@@ -207,7 +207,27 @@ atlas restore drill            # every app
 ```
 Drills run daily at 03:30 UTC through `atlas-drill.timer`. The installer enables it automatically when `atlas-backup.timer` is enabled; otherwise run `sudo systemctl enable --now atlas-drill.timer`.
 
-### 4. Enable Native Systemd 6-Hour Persistent Timer
+### 4. Back Up Files and Docker Volumes
+Databases are only half of most apps: user uploads and generated media live in Docker volumes or host folders. List them per app in `config/apps.yml`:
+
+```yaml
+apps:
+  myapp:
+    files:
+      volumes: [myapp_uploads]            # Docker named volumes
+      paths: [/var/www/myapp/storage]     # host directories
+      exclude: ["cache", "*.log"]
+      every_hours: 24                     # default 24
+      retention_days: 7                   # default 7
+```
+
+Each run writes `myapp-files-<timestamp>.tar.gz` plus a manifest (file count, bytes and a digest of every file's checksum). Files archives go through the same encryption, offsite confirmation and durability gate as database dumps, and the nightly drill re-reads every file and compares it with the manifest. Apps with only files (no database) are supported.
+
+```bash
+atlas restore files myapp --to=/var/restore/myapp   # extracts into a new directory; never touches live data
+```
+
+### 5. Enable Native Systemd 6-Hour Persistent Timer
 Systemd is the recommended production scheduler for Atlas. The installer sets up the unit files automatically. To enable and verify the scheduler:
 
 ```bash
