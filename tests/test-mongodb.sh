@@ -106,7 +106,7 @@ fi
 
 if [ -n "${ARCHIVE}" ]; then
   # 3. A cut-off archive is rejected
-  (set +o pipefail; gzip -dc "${ARCHIVE}" | head -c 40000 | gzip > "${WORK}/cut.sql.gz")
+  (set +o pipefail; gzip -dc "${ARCHIVE}" 2> /dev/null | head -c 40000 | gzip > "${WORK}/cut.sql.gz")
   if ! python3 -I "${MANIFEST_PY}" manifest "${WORK}/cut.sql.gz" > /dev/null 2> "${WORK}/cut.err" && grep -q "truncated" "${WORK}/cut.err"; then
     pass "A truncated archive is detected and rejected"
   else
