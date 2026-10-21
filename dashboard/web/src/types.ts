@@ -22,6 +22,7 @@ export interface SystemStatus {
   };
   offsite: { provider: string; bucket: string; configured: boolean };
   scheduler: { type: "systemd" | "cron" | "none"; active: boolean; rpo: string; drills_active?: boolean };
+  apps?: Record<string, { database: boolean }>;
 }
 
 export interface Backup {
@@ -36,6 +37,8 @@ export interface Backup {
   age_size_bytes: number;
   synced?: boolean;
   contents?: { tables: number; rows: number } | null;
+  // Files archives only: what the archive holds.
+  files?: { files: number; bytes: number; sources: { kind: "volume" | "path"; name: string; files: number }[] } | null;
   drill?: RecordedDrill | null;
   metadata: Record<string, unknown>;
 }
@@ -49,8 +52,13 @@ export interface RecordedDrill {
   tables_verified?: number;
   tables_expected?: number;
   rows_found?: number;
+  files_found?: number;
+  bytes_found?: number;
   image?: string;
 }
+
+// /api/files: per app, whether file backups are configured and the archives on disk.
+export type FilesByApp = Record<string, { configured: boolean; every_hours?: number; archives: Backup[] }>;
 
 export type BackupsByApp = Record<string, Backup[]>;
 
