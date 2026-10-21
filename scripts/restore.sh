@@ -246,7 +246,11 @@ case "${TARGET_ENV}" in
       if [ -n "${PROD_CONTAINER}" ] && [ "${PROD_CONTAINER}" != "null" ]; then
         RESTORE_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${PROD_CONTAINER}" 2>/dev/null || true)"
       fi
-      RESTORE_IMAGE="${RESTORE_IMAGE:-postgres:16-alpine}"
+      case "${DB_TYPE}" in
+        mysql) RESTORE_IMAGE="${RESTORE_IMAGE:-mysql:8.4}" ;;
+        mariadb) RESTORE_IMAGE="${RESTORE_IMAGE:-mariadb:11}" ;;
+        *) RESTORE_IMAGE="${RESTORE_IMAGE:-postgres:16-alpine}" ;;
+      esac
     fi
     if ! [[ "${RESTORE_IMAGE}" =~ ^[a-zA-Z0-9][a-zA-Z0-9._/:@-]*$ ]]; then
       log_error "Invalid restore image reference: '${RESTORE_IMAGE}'"
@@ -305,26 +309,45 @@ PYEOF
     }
     trap cleanup_test_container EXIT
 
-    log_info "Spawning temporary PostgreSQL container from ${RESTORE_IMAGE}..."
-    if ! docker run -d --name "${TEMP_NAME}" \
-      -e POSTGRES_USER="${TEST_USER}" \
-      -e POSTGRES_PASSWORD="${TEST_PASS}" \
-      -e POSTGRES_DB="${TEST_DB}" \
-      "${RESTORE_IMAGE}" >/dev/null; then
+    case "${DB_TYPE}" in
+      mysql|mariadb) ENGINE="mysql" ;;
+      *) ENGINE="postgres" ;;
+    esac
+
+    # Engine-specific client inside the throwaway container. The password comes
+    # from the container's own environment, never the host command line.
+    MYSQL_CLIENT='if command -v mariadb >/dev/null 2>&1; then c=mariadb; else c=mysql; fi; export MYSQL_PWD="${MARIADB_ROOT_PASSWORD:-${MYSQL_ROOT_PASSWORD:-}}"'
+    test_sql() {  # test_sql <extra client args...>  (SQL on stdin)
+      if [ "${ENGINE}" = "mysql" ]; then
+        docker exec -i "${TEMP_NAME}" sh -c "${MYSQL_CLIENT}"'; exec "$c" --protocol=tcp -h127.0.0.1 -uroot --default-character-set=utf8mb4 "$@"' _ "$@" "${TEST_DB}"
+      else
+        docker exec -i "${TEMP_NAME}" sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; u="$1"; d="$2"; shift 2; exec psql -h 127.0.0.1 -U "$u" -d "$d" "$@"' _ "${TEST_USER}" "${TEST_DB}" "$@"
+      fi
+    }
+
+    log_info "Spawning temporary ${DB_TYPE} container from ${RESTORE_IMAGE}..."
+    if [ "${ENGINE}" = "mysql" ]; then
+      START_ENV=(-e MYSQL_ROOT_PASSWORD="${TEST_PASS}" -e MARIADB_ROOT_PASSWORD="${TEST_PASS}" -e MYSQL_DATABASE="${TEST_DB}" -e MARIADB_DATABASE="${TEST_DB}")
+      READY_SECONDS=180
+    else
+      START_ENV=(-e POSTGRES_USER="${TEST_USER}" -e POSTGRES_PASSWORD="${TEST_PASS}" -e POSTGRES_DB="${TEST_DB}")
+      READY_SECONDS=60
+    fi
+    if ! docker run -d --name "${TEMP_NAME}" "${START_ENV[@]}" "${RESTORE_IMAGE}" >/dev/null; then
       drill_failed "Could not start a temporary database from image ${RESTORE_IMAGE}."
     fi
 
+    # MySQL/MariaDB images run a temporary init server without networking first,
+    # so readiness is checked over TCP: only the final server answers there.
     log_info "Waiting for temporary database to accept connections..."
     sleep 2
-    for i in {1..30}; do
-      if docker exec "${TEMP_NAME}" pg_isready -U "${TEST_USER}" -d "${TEST_DB}" >/dev/null 2>&1; then
-        if docker exec -e PGPASSWORD="${TEST_PASS}" "${TEMP_NAME}" psql -U "${TEST_USER}" -d "${TEST_DB}" -c "SELECT 1;" >/dev/null 2>&1; then
-          break
-        fi
+    for ((i = 1; i <= READY_SECONDS; i++)); do
+      if echo "SELECT 1;" | test_sql >/dev/null 2>&1; then
+        break
       fi
       sleep 1
-      if [ "$i" -eq 30 ]; then
-        drill_failed "Temporary database did not accept connections within 30 seconds."
+      if [ "$i" -eq "${READY_SECONDS}" ]; then
+        drill_failed "Temporary database did not accept connections within ${READY_SECONDS} seconds."
       fi
     done
 
@@ -338,19 +361,26 @@ PYEOF
       fi
     fi
 
-    log_info "Restoring SQL dump into test database with ON_ERROR_STOP=1..."
-    gzip -dc "${BACKUP_FILE}" | docker exec -i "${TEMP_NAME}" \
-      sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec psql -q -v ON_ERROR_STOP=1 -U "$1" -d "$2"' _ "${TEST_USER}" "${TEST_DB}" > "${DRILL_WORK}/restore.log" 2>&1 || {
+    log_info "Restoring SQL dump into test database (stops at the first error)..."
+    if [ "${ENGINE}" = "mysql" ]; then
+      RESTORE_ARGS=()
+    else
+      RESTORE_ARGS=(-q -v ON_ERROR_STOP=1)
+    fi
+    gzip -dc "${BACKUP_FILE}" | test_sql ${RESTORE_ARGS[@]+"${RESTORE_ARGS[@]}"} > "${DRILL_WORK}/restore.log" 2>&1 || {
         tail -n 5 "${DRILL_WORK}/restore.log" >&2 || true
-        drill_failed "SQL error while restoring: $(grep -m1 -E 'ERROR' "${DRILL_WORK}/restore.log" | cut -c1-200 || echo 'see log')"
+        drill_failed "SQL error while restoring: $(grep -m1 -E 'ERROR' "${DRILL_WORK}/restore.log" | grep -v 'Using a password' | cut -c1-200 || echo 'see log')"
       }
     log_pass "Database restore executed without errors."
 
     log_info "Verifying every table's row count against the backup manifest..."
     python3 -I "${SCRIPT_DIR}/lib/dump_manifest.py" count-sql "${MANIFEST}" > "${DRILL_WORK}/count.sql"
-    if ! docker exec -i "${TEMP_NAME}" \
-      sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec psql -At -F "	" -v ON_ERROR_STOP=1 -U "$1" -d "$2"' _ "${TEST_USER}" "${TEST_DB}" \
-      < "${DRILL_WORK}/count.sql" > "${DRILL_WORK}/counts.tsv" 2> "${DRILL_WORK}/count.err"; then
+    if [ "${ENGINE}" = "mysql" ]; then
+      COUNT_ARGS=(-N -B)
+    else
+      COUNT_ARGS=(-At -F "	" -v ON_ERROR_STOP=1)
+    fi
+    if ! test_sql "${COUNT_ARGS[@]}" < "${DRILL_WORK}/count.sql" > "${DRILL_WORK}/counts.tsv" 2> "${DRILL_WORK}/count.err"; then
       drill_failed "Restored database is missing tables: $(head -c 200 "${DRILL_WORK}/count.err")"
     fi
 
@@ -392,21 +422,48 @@ PYEOF
     # Execute restore against production container
     log_info "Executing restore against production container '${PROD_CONTAINER}'..."
     
-    if [ -z "${DB_USER}" ] || [ "${DB_USER}" = "null" ]; then
-      DB_USER="$(docker exec "${PROD_CONTAINER}" printenv POSTGRES_USER 2>/dev/null || echo "postgres")"
-    fi
-    if [ -z "${DB_NAME}" ] || [ "${DB_NAME}" = "null" ]; then
-      DB_NAME="$(docker exec "${PROD_CONTAINER}" printenv POSTGRES_DB 2>/dev/null || echo "${DB_USER}")"
-    fi
+    case "${DB_TYPE}" in
+      mysql|mariadb)
+        if [ -z "${DB_USER}" ] || [ "${DB_USER}" = "null" ]; then DB_USER="root"; fi
+        if [ -z "${DB_NAME}" ] || [ "${DB_NAME}" = "null" ]; then
+          DB_NAME="$(docker exec "${PROD_CONTAINER}" sh -c 'printf %s "${MARIADB_DATABASE:-${MYSQL_DATABASE:-}}"' 2>/dev/null || true)"
+        fi
+        if [ -z "${DB_NAME}" ]; then
+          log_error "No database name for '${APP_TARGET}'. Set database.name in apps.yml."
+          exit 1
+        fi
+        # The dump drops and recreates each table; the client stops at the first error.
+        gzip -dc "${BACKUP_FILE}" | docker exec -i "${PROD_CONTAINER}" sh -c '
+          user="$1"; db="$2"
+          if [ "$user" = "root" ]; then pw="${MARIADB_ROOT_PASSWORD:-${MYSQL_ROOT_PASSWORD:-}}"; else pw="${MARIADB_PASSWORD:-${MYSQL_PASSWORD:-}}"; fi
+          if command -v mariadb >/dev/null 2>&1; then c=mariadb; else c=mysql; fi
+          export MYSQL_PWD="$pw"
+          exec "$c" -u"$user" --default-character-set=utf8mb4 "$db"
+        ' _ "${DB_USER}" "${DB_NAME}" || {
+            log_error "Production database restore failed during SQL execution!"
+            send_atlas_notification "CRITICAL" "Production Database Restore Failed" "Application: \`${APP_TARGET}\`\nContainer: \`${PROD_CONTAINER}\`\nArchive: \`$(basename "${BACKUP_FILE}")\`\nError: Production restore failed on host \`$(hostname)\`." || true
+            exit 1
+          }
+        ;;
+      *)
+        if [ -z "${DB_USER}" ] || [ "${DB_USER}" = "null" ]; then
+          DB_USER="$(docker exec "${PROD_CONTAINER}" printenv POSTGRES_USER 2>/dev/null || echo "postgres")"
+        fi
+        if [ -z "${DB_NAME}" ] || [ "${DB_NAME}" = "null" ]; then
+          DB_NAME="$(docker exec "${PROD_CONTAINER}" printenv POSTGRES_DB 2>/dev/null || echo "${DB_USER}")"
+        fi
     
-    # Execute restore using -v ON_ERROR_STOP=1 --single-transaction
-    gzip -dc "${BACKUP_FILE}" | docker exec -i "${PROD_CONTAINER}" \
-      sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec psql -v ON_ERROR_STOP=1 --single-transaction -U "$1" -d "$2"' _ "${DB_USER}" "${DB_NAME}" || {
-        log_error "Production database restore failed during SQL execution!"
-        send_atlas_notification "CRITICAL" "Production Database Restore Failed" "Application: \`${APP_TARGET}\`\nContainer: \`${PROD_CONTAINER}\`\nArchive: \`$(basename "${BACKUP_FILE}")\`\nError: Production restore failed on host \`$(hostname)\`." || true
-        exit 1
-      }
+        # Execute restore using -v ON_ERROR_STOP=1 --single-transaction
+        gzip -dc "${BACKUP_FILE}" | docker exec -i "${PROD_CONTAINER}" \
+          sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec psql -v ON_ERROR_STOP=1 --single-transaction -U "$1" -d "$2"' _ "${DB_USER}" "${DB_NAME}" || {
+            log_error "Production database restore failed during SQL execution!"
+            send_atlas_notification "CRITICAL" "Production Database Restore Failed" "Application: \`${APP_TARGET}\`\nContainer: \`${PROD_CONTAINER}\`\nArchive: \`$(basename "${BACKUP_FILE}")\`\nError: Production restore failed on host \`$(hostname)\`." || true
+            exit 1
+          }
       
+        ;;
+    esac
+
     log_success "Production database restore completed successfully."
     ;;
 
