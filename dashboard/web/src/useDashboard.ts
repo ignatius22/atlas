@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { BackupsByApp, OffsiteListing, SystemStatus } from "./types";
+import type { BackupsByApp, FilesByApp, OffsiteListing, SystemStatus } from "./types";
 
 const REFRESH_MS = 30_000;
 
 export interface DashboardData {
   status?: SystemStatus;
   backups?: BackupsByApp;
+  files?: FilesByApp;
   offsite?: OffsiteListing;
   error?: string;
   loading: boolean;
@@ -17,6 +18,7 @@ export interface DashboardData {
 export function useDashboard(): DashboardData {
   const [status, setStatus] = useState<SystemStatus>();
   const [backups, setBackups] = useState<BackupsByApp>();
+  const [files, setFiles] = useState<FilesByApp>();
   const [offsite, setOffsite] = useState<OffsiteListing>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
@@ -28,9 +30,10 @@ export function useDashboard(): DashboardData {
     inFlight.current = true;
     try {
       // Status and backups drive the page; offsite listing is slower and optional.
-      const [s, b] = await Promise.all([api.status(), api.backups()]);
+      const [s, b, f] = await Promise.all([api.status(), api.backups(), api.files()]);
       setStatus(s);
       setBackups(b);
+      setFiles(f);
       setError(undefined);
       setUpdatedAt(Date.now());
       api.offsite().then(setOffsite).catch(() => setOffsite(undefined));
@@ -50,7 +53,7 @@ export function useDashboard(): DashboardData {
     return () => window.clearInterval(id);
   }, [refresh]);
 
-  return { status, backups, offsite, error, loading, updatedAt, refresh };
+  return { status, backups, files, offsite, error, loading, updatedAt, refresh };
 }
 
 // Re-render once a minute so "x min ago" labels stay honest.

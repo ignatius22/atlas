@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { api, ApiError, clearToken, getToken, setToken } from "./api";
-import { ago, buildChain, verdict, type DrillResult } from "./chain";
+import { ago, buildChain, severity, verdict, worstChain, type AppChain, type DrillResult } from "./chain";
 import type { ActionName, SystemStatus } from "./types";
 import { useDashboard, useNow } from "./useDashboard";
 import { AppRow } from "./components/AppRow";
@@ -21,16 +21,35 @@ export default function App() {
   const [tokenError, setTokenError] = useState<string>();
   const nextId = useRef(1);
 
-  const chains = useMemo(() => {
+  // One entry per app: its database chain, its files chain, and the weaker of the two.
+  const apps = useMemo(() => {
     const backups = data.backups ?? {};
-    // Worst first, so the app that needs attention is at the top.
-    const rank = { unprotected: 0, "drill-failed": 1, "no-backups": 2, "at-risk": 3, recoverable: 4 } as const;
-    return Object.keys(backups)
-      .map((app) =>
-        buildChain(app, backups[app], drills[app], now, { drillsScheduled: data.status?.scheduler.drills_active }),
-      )
-      .sort((a, b) => rank[a.health] - rank[b.health] || a.app.localeCompare(b.app));
-  }, [data.backups, data.status, drills, now]);
+    const files = data.files ?? {};
+    const names = Array.from(new Set([...Object.keys(backups), ...Object.keys(files)]));
+    const drillsScheduled = data.status?.scheduler.drills_active;
+    return names
+      .map((app) => {
+        const dbBackups = backups[app] ?? [];
+        const hasDb = data.status?.apps?.[app]?.database ?? true;
+        const db =
+          hasDb || dbBackups.length > 0
+            ? buildChain(app, dbBackups, drills[app], now, { drillsScheduled })
+            : undefined;
+        const fileInfo = files[app];
+        const fileChain = fileInfo
+          ? buildChain(app, fileInfo.archives, undefined, now, {
+              drillsScheduled,
+              kind: "files",
+              lateAfterHours: (fileInfo.every_hours ?? 24) + 2,
+            })
+          : undefined;
+        const parts = [db, fileChain].filter((c): c is AppChain => !!c);
+        return { app, db, files: fileChain, primary: worstChain(parts), dbBackups };
+      })
+      .sort((a, b) => severity(a.primary.health) - severity(b.primary.health) || a.app.localeCompare(b.app));
+  }, [data.backups, data.files, data.status, drills, now]);
+
+  const chains = apps.map((a) => ({ ...a.primary, app: a.app }));
 
   const run = useCallback(
     async (action: ActionName, app: string) => {
@@ -135,13 +154,16 @@ export default function App() {
                   <code>atlas backup create --all</code>.
                 </p>
               ) : (
-                chains.map((c) => (
+                apps.map((a) => (
                   <AppRow
-                    key={c.app}
-                    chain={c}
-                    backups={data.backups?.[c.app] ?? []}
+                    key={a.app}
+                    app={a.app}
+                    primary={a.primary}
+                    db={a.db}
+                    files={a.files}
+                    backups={a.dbBackups}
                     now={now}
-                    busy={busy[c.app]}
+                    busy={busy[a.app]}
                     onAction={requestAction}
                   />
                 ))
