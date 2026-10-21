@@ -1,6 +1,6 @@
 # Atlas Infrastructure & Disaster Recovery Framework (v1.1.0)
 
-Atlas is a resilient, application-agnostic infrastructure, disaster recovery, and operational framework for Linux Virtual Private Servers (VPS). Built with boring, auditable technology—Bash, Docker Compose, Nginx, and Python—Atlas provides hardened deployment pipelines, automated snapshotting, asymmetric zero-knowledge offsite replication, and automated recovery verification without introducing heavyweight cluster orchestrators.
+Atlas is a resilient, application-agnostic infrastructure, disaster recovery, and operational framework for Linux Virtual Private Servers (VPS). It backs up PostgreSQL, MySQL and MariaDB databases plus Docker volumes and app files, and proves every backup restores. Built with boring, auditable technology—Bash, Docker Compose, Nginx, and Python—Atlas provides hardened deployment pipelines, automated snapshotting, asymmetric zero-knowledge offsite replication, and automated recovery verification without introducing heavyweight cluster orchestrators.
 
 ---
 
