@@ -30,7 +30,9 @@ mkdir -p "${INSTALL_DIR}"
 REAL_SOURCE="$(cd "${SOURCE_ROOT}" && pwd -P)"
 REAL_TARGET="$(cd "${INSTALL_DIR}" && pwd -P)"
 if [ "${REAL_SOURCE}" != "${REAL_TARGET}" ]; then
-  cp -a "${SOURCE_ROOT}/." "${INSTALL_DIR}/"
+  # Copy the code, not the source checkout's git history or build leftovers
+  # (read-only git objects also break a second install as a non-root user).
+  tar -C "${SOURCE_ROOT}" --exclude=./.git --exclude=./dashboard/web/node_modules -cf - . | tar -C "${INSTALL_DIR}" -xf -
 fi
 
 mkdir -p "$(dirname "${BIN_LINK}")"
