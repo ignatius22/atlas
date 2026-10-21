@@ -97,16 +97,11 @@ fi
 # Preflight check for PyYAML
 check_pyyaml_dependency
 
-# Global Mutex to prevent concurrent backup collisions
-LOCK_DIR="/tmp/atlas_backup.lock.d"
-if ! mkdir "${LOCK_DIR}" 2>/dev/null; then
-  log_error "Another Atlas backup process is currently running (Lock: ${LOCK_DIR}). Exiting."
+# One backup run at a time (kernel lock: released automatically if this process dies)
+if ! acquire_atlas_lock backup; then
+  log_error "Another Atlas backup process is currently running (lock: ${ATLAS_LOCK_FILE}). Exiting."
   exit 1
 fi
-cleanup_backup_lock() {
-  rm -rf "${LOCK_DIR}" 2>/dev/null || true
-}
-trap cleanup_backup_lock EXIT INT TERM
 
 # Load global backup defaults
 BACKUP_CONFIG_FILE="$(find_backup_config || true)"
