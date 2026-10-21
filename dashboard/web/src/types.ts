@@ -21,6 +21,7 @@ export interface SystemStatus {
     recipient_masked: string;
   };
   offsite: { provider: string; bucket: string; configured: boolean };
+  heartbeat?: { configured: boolean };
   scheduler: { type: "systemd" | "cron" | "none"; active: boolean; rpo: string; drills_active?: boolean };
   apps?: Record<string, { database: boolean }>;
 }
