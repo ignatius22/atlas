@@ -31,6 +31,7 @@ All notable changes to Atlas will be documented in this file.
 - `infra/nginx/production/`: live nginx configs for our own sites. They were never read from the repo (the server uses its own copies in `/etc/nginx`). Generic `nginx.conf`, snippets and the app template remain.
 
 ### Fixed
+- When `pg_dump` or `mysqldump`/`mariadb-dump` fails, `backup.sh` now reports the tool's own error (for example `database "x" does not exist`) instead of only "decompressed SQL stream is empty".
 - `atlas-backup.service` wrote `exit $rc`, which systemd expands itself (to empty) before bash runs, so a failed backup followed by a successful sync exited 0 and systemd recorded success. Shell variables in unit files are now written `$$rc`, with a test that keeps them escaped.
 - Dashboard reported every database container without a Docker healthcheck as "not found / stopped" on newer Docker versions (Go template error on `.State.Health`). It now reads `docker inspect` JSON.
 - `backup.sh` and `sync-offsite.sh` used lock directories in `/tmp`. A crash, `kill -9` or OOM left the directory behind and silently blocked every later backup or sync. They now use kernel locks (`flock`) on `/run/atlas/*.lock`, which the kernel releases when the process dies, as the README always described. Leftover `/tmp/atlas_*.lock.d` directories are ignored.
