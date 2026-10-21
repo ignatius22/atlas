@@ -17,6 +17,10 @@ Environment:
   ATLAS_HEARTBEAT_FAIL_URL    failure ping URL (default: <URL>/fail, the healthchecks.io convention)
   ATLAS_HEARTBEAT_SECRET      optional; adds X-Atlas-Signature: sha256=<hmac of body>
   ATLAS_BACKUP_DIR            default /var/backups
+  ATLAS_CONFIG_FILE           apps.yml to report on (default: <atlas>/config/apps.yml).
+                              Only configured apps are reported; old folders in the
+                              backup directory are ignored. Without a config, every
+                              folder there is reported.
 
 Commands:
   report [--event NAME] [--exit-code N]   print the report JSON
@@ -32,6 +36,7 @@ import socket
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 FORMAT = 1
@@ -77,11 +82,38 @@ def _latest_drill(paths):
     return best
 
 
-def build_report(backup_dir, event, exit_code, now=None):
+def load_configured_apps(config_path=None):
+    """Apps that should have backups, from apps.yml: {name: expects_backups}. None if no config."""
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = config_path or os.environ.get("ATLAS_CONFIG_FILE") or os.path.join(root, "config", "apps.yml")
+    if not os.path.isfile(path):
+        return None
+    sys.path.append(os.path.join(root, "scripts", "lib", "vendor"))
+    try:
+        import yaml
+
+        with open(path, encoding="utf-8") as fh:
+            apps = (yaml.safe_load(fh) or {}).get("apps") or {}
+    except Exception:  # an unreadable config must not stop the heartbeat
+        return None
+    if not isinstance(apps, dict):
+        return None
+    configured = {}
+    for name, app in apps.items():
+        app = app if isinstance(app, dict) else {}
+        db = app.get("database") if isinstance(app.get("database"), dict) else None
+        has_db = bool(db) and db.get("backup", True) is not False
+        configured[str(name)] = has_db or bool(app.get("files"))
+    return configured
+
+
+def build_report(backup_dir, event, exit_code, now=None, configured=None):
     now = now or time.time()
     apps = []
     problems = []
-    if os.path.isdir(backup_dir):
+    if configured is not None:
+        names = sorted(configured)
+    elif os.path.isdir(backup_dir):
         names = sorted(
             d for d in os.listdir(backup_dir)
             if os.path.isdir(os.path.join(backup_dir, d)) and d not in {"lost+found", "offsite-mock"}
@@ -94,6 +126,9 @@ def build_report(backup_dir, event, exit_code, now=None):
         db_paths = [p for p in glob.glob(os.path.join(base, f"{app}-*.sql.gz")) if "-files-" not in os.path.basename(p)]
         file_paths = glob.glob(os.path.join(base, f"{app}-files-*.tar.gz"))
         if not db_paths and not file_paths:
+            if configured and configured.get(app):
+                apps.append({"app": app, "database": None, "files": None})
+                problems.append(f"{app}: configured but has no backups yet")
             continue
         entry = {"app": app}
         for kind, paths, late in (("database", db_paths, BACKUP_LATE_HOURS), ("files", file_paths, FILES_LATE_HOURS)):
@@ -197,7 +232,8 @@ def main(argv):
             sys.stderr.write(f"unknown argument {args[i]}\n")
             return 2
 
-    report = build_report(os.environ.get("ATLAS_BACKUP_DIR", "/var/backups"), event, exit_code)
+    report = build_report(os.environ.get("ATLAS_BACKUP_DIR", "/var/backups"), event, exit_code,
+                          configured=load_configured_apps())
     if argv[1] == "report":
         print(json.dumps(report, indent=2))
         return 0
@@ -206,8 +242,9 @@ def main(argv):
     if not url:
         print("heartbeat: ATLAS_HEARTBEAT_URL not set; skipped")
         return 0
-    if not url.startswith(("https://", "http://")):
-        print("heartbeat: ATLAS_HEARTBEAT_URL must be an http(s) URL; skipped")
+    host = urllib.parse.urlparse(url).hostname or ""
+    if not url.startswith(("https://", "http://")) or host in {"", "http", "https"} or "://" in url.split("://", 1)[1]:
+        print(f"heartbeat: ATLAS_HEARTBEAT_URL looks wrong ({url}); expected e.g. https://hc-ping.com/<uuid>. Skipped.")
         return 0
     ok, message = send(
         report,
