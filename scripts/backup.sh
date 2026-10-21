@@ -255,8 +255,16 @@ backup_single_app() {
       
       # Stream pg_dump through gzip directly to temporary target archive
       # set -o pipefail ensures failure on pg_dump aborts the pipeline
-      docker exec -i "${container}" sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec pg_dump -U "$1" -d "$2" --no-owner --clean --if-exists' _ "${db_user}" "${db_name}" \
-        | gzip -9 > "${temp_target}"
+      # errexit does not apply inside this function when it is called from an
+      # if, so check the pipeline explicitly and report pg_dump's own error.
+      if ! docker exec -i "${container}" sh -c 'export PGPASSWORD="${POSTGRES_PASSWORD:-}"; exec pg_dump -U "$1" -d "$2" --no-owner --clean --if-exists' _ "${db_user}" "${db_name}" \
+        2> "${temp_target}.err" | gzip -9 > "${temp_target}"; then
+        log_error "pg_dump failed for '${app}': $(grep -v '^\s*$' "${temp_target}.err" | tail -n 2 | tr '\n' ' ' | cut -c1-300)"
+        rm -f "${temp_target}.err"
+        cleanup_failed_backup
+        return 1
+      fi
+      rm -f "${temp_target}.err"
       ;;
       
     mysql|mariadb)
@@ -281,7 +289,13 @@ backup_single_app() {
         if command -v mariadb-dump >/dev/null 2>&1; then dump=mariadb-dump; else dump=mysqldump; fi
         export MYSQL_PWD="$pw"
         exec "$dump" -u"$user" --single-transaction --quick --no-tablespaces --routines --triggers --events --hex-blob --default-character-set=utf8mb4 "$db"
-      ' _ "${db_user}" "${db_name}" | gzip -9 > "${temp_target}"
+      ' _ "${db_user}" "${db_name}" 2> "${temp_target}.err" | gzip -9 > "${temp_target}" || {
+        log_error "${db_type} dump failed for '${app}': $(grep -v -e '^\s*$' -e 'Using a password' "${temp_target}.err" | tail -n 2 | tr '\n' ' ' | cut -c1-300)"
+        rm -f "${temp_target}.err"
+        cleanup_failed_backup
+        return 1
+      }
+      rm -f "${temp_target}.err"
       ;;
 
     *)
