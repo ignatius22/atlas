@@ -12,7 +12,7 @@ Each app is shown as a chain of custody. A backup has to be dumped, checksummed,
 | React app | `dashboard/web` | Vite + React + TypeScript source. |
 | Build output | `dashboard/dist` | Committed, so the VPS never needs Node.js. CI fails if it is out of date. |
 
-Read-only endpoints (`/api/status`, `/api/backups`, `/api/offsite`) need no token. Actions (`/api/actions/backup`, `sync`, `restore-test`) require the `X-Atlas-Token` header, which the app asks for once per browser tab.
+Read-only endpoints (`/api/status`, `/api/backups`, `/api/files`, `/api/offsite`) need no token. Actions (`/api/actions/backup`, `sync`, `restore-test`) require the `X-Atlas-Token` header, which the app asks for once per browser tab.
 
 ## Running it on the server
 

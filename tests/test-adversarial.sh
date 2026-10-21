@@ -312,6 +312,8 @@ from dashboard import server
 
 src = open("dashboard/server.py").read()
 assert "default_apps" not in src, "hardcoded default apps still present"
+# Go templates on .State.Health fail on newer Docker for containers without a healthcheck
+assert "{{.State.Health" not in src and "{{if .State.Health" not in src, "container status must be read from docker inspect JSON"
 
 cases = {
     "https://abc.r2.cloudflarestorage.com": ("Cloudflare", "Cloudflare R2"),
