@@ -210,7 +210,7 @@ os.environ["ATLAS_DASHBOARD_TOKEN"] = test_token
 
 assert server.HOST == "127.0.0.1" or os.environ.get("ATLAS_DASHBOARD_HOST") == "127.0.0.1"
 
-httpd = server.HTTPServer(("127.0.0.1", test_port), server.AtlasDashboardHandler)
+httpd = server.ThreadingHTTPServer(("127.0.0.1", test_port), server.AtlasDashboardHandler)
 t = threading.Thread(target=httpd.serve_forever, daemon=True)
 t.start()
 time.sleep(0.3)
@@ -334,6 +334,7 @@ def counting_walk(*a, **k):
 server.os.walk = counting_walk
 server._key_scan_cache["at"] = 0.0
 server.KEY_SCAN_DIRS = ["/nonexistent-atlas-dir", "dashboard"]
+server.backup_root = lambda: server.Path("/nonexistent-atlas-dir")  # also scanned; stub it out
 server.count_private_keys_on_host()
 first = calls["n"]
 server.count_private_keys_on_host()
@@ -359,7 +360,7 @@ from dashboard import server
 assert server.PUBLIC_DIR.name == "dist", f"dashboard serves {server.PUBLIC_DIR}, expected dashboard/dist"
 assert (server.PUBLIC_DIR / "index.html").exists(), "dashboard/dist/index.html missing: run npm run build in dashboard/web"
 
-httpd = server.HTTPServer(("127.0.0.1", 0), server.AtlasDashboardHandler)
+httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.AtlasDashboardHandler)
 threading.Thread(target=httpd.serve_forever, daemon=True).start()
 html = urllib.request.urlopen(f"http://127.0.0.1:{httpd.server_port}/").read().decode()
 assert '<div id="root">' in html, "built React index.html not served at /"

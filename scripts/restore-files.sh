@@ -55,7 +55,7 @@ fi
 validate_app_name "${APP_TARGET}" || exit 1
 
 if [ -z "${ARCHIVE}" ]; then
-  ARCHIVE="$(find "/var/backups/${APP_TARGET}" -maxdepth 1 -type f -name "${APP_TARGET}-files-*.tar.gz" 2>/dev/null | sort -r | head -n 1 || true)"
+  ARCHIVE="$(find "${ATLAS_BACKUP_DIR}/${APP_TARGET}" -maxdepth 1 -type f -name "${APP_TARGET}-files-*.tar.gz" 2>/dev/null | sort -r | head -n 1 || true)"
 fi
 if [ -z "${ARCHIVE}" ] || [ ! -f "${ARCHIVE}" ]; then
   log_error "No files archive found for '${APP_TARGET}'."

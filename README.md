@@ -53,7 +53,7 @@ flowchart LR
 ```
 
 1. **Back up.** `backup.sh` dumps each database from inside its container (`pg_dump`, `mariadb-dump`/`mysqldump`, or `mongodump`), compresses it and writes a checksum. It reads every table's row count (or collection's document count) from the dump itself and stores it in `<archive>.manifest.json`. A dump that is empty or cut off is rejected and never replaces a good one. Docker volumes and folders listed under `files:` are archived the same way.
-2. **Copy offsite.** `sync-offsite.sh` encrypts each archive with your age public key, uploads it with up to 3 attempts, then checks the object's size and checksum in the bucket. Only then does it write `<archive>.synced`. After an outage it uploads every archive still missing, oldest first.
+2. **Copy offsite.** `sync-offsite.sh` encrypts each archive with your age public key, uploads it with up to 3 attempts, then checks that the object in the bucket is exactly the size of the local ciphertext. A SHA-256 of the ciphertext is stored next to it. Only then does it write `<archive>.synced`. After an outage it uploads every archive still missing, oldest first.
 3. **Prove it restores.** Each night `drill.sh` starts a throwaway container from the same image production runs, restores the newest backup into it, and compares every table's count with the manifest. The result is written to `<archive>.drill.json`, shown in the dashboard and alerted on failure. Production is never touched.
 4. **Report.** After every backup and drill run, a short status report (no data, no keys) goes to your watchdog. Problems go to its failure URL, and silence trips it too.
 
@@ -117,12 +117,18 @@ On a new server, install Atlas with the same `.env` and `apps.yml`, start your a
 # See what is offsite
 atlas backup list myapp
 
-# Restore the newest offsite backup into a throwaway container first, to check it
-ATLAS_AGE_IDENTITY="AGE-SECRET-KEY-1..." atlas restore test myapp
+# Put the private key in a file only root can read (paste it, then Ctrl-D)
+(umask 077 && cat > /root/age-key.txt)
 
-# Then into production
-./scripts/restore-offsite.sh --app=myapp --key-file=/path/to/key.txt --target=production
+# Restore the newest offsite backup into a throwaway container first, to check it
+atlas restore test myapp --key-file=/root/age-key.txt
+
+# Then into production, and remove the key from the server when you are done
+./scripts/restore-offsite.sh --app=myapp --key-file=/root/age-key.txt --target=production
+shred -u /root/age-key.txt
 ```
+
+Don't put the key in a variable on the command line (`ATLAS_AGE_IDENTITY=...`): it is saved in your shell history.
 
 To restore a local archive into production on the same server, use `atlas restore run myapp --target=production`. It takes a safety backup of the current database first and asks you to type `CONFIRM-RESTORE-TO-PRODUCTION`. [RECOVERY.md](RECOVERY.md) covers every case step by step, including files and a compromised server.
 

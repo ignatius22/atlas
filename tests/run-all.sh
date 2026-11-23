@@ -41,6 +41,7 @@ run_test_suite "${TEST_DIR}/test-mongodb.sh" "MongoDB Tests"
 run_test_suite "${TEST_DIR}/test-heartbeat.sh" "Heartbeat Watchdog Tests"
 run_test_suite "${TEST_DIR}/test-discover.sh" "Discover Tests"
 run_test_suite "${TEST_DIR}/test-get.sh" "One-line Installer Tests"
+run_test_suite "${TEST_DIR}/test-audit-fixes.sh" "Audit Regression Tests"
 
 printf "\033[1m\033[36m==================================================\033[0m\n"
 if [ "${FAILURES}" -eq 0 ]; then

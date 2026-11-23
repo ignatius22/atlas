@@ -12,8 +12,9 @@ import json
 import time
 import hmac
 import shutil
+import threading
 import subprocess
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
 from pathlib import Path
 
@@ -23,8 +24,38 @@ PUBLIC_DIR = Path(__file__).resolve().parent / "dist"
 ENV_FILE = BASE_DIR / ".env"
 APPS_FILE = BASE_DIR / "config" / "apps.yml"
 
+sys.path.insert(0, str(BASE_DIR / "scripts" / "lib"))
+from atlas_paths import backup_dir as _resolve_backup_dir  # noqa: E402
+
+
+def backup_root():
+    """The local backup directory, resolved the same way the scripts resolve it."""
+    return Path(_resolve_backup_dir({**load_env(), **os.environ}))
+
+
 PORT = int(os.environ.get("ATLAS_DASHBOARD_PORT", 8888))
 HOST = os.environ.get("ATLAS_DASHBOARD_HOST", "127.0.0.1")
+
+# DNS rebinding defence. Binding to 127.0.0.1 stops other machines, but not a
+# web page open in the browser of whoever holds the SSH tunnel: that page can
+# point its own domain at 127.0.0.1 and read our responses as same-origin.
+# The Host header still names the attacker's domain, so only answer requests
+# addressed to localhost. Add a reverse-proxy hostname with
+# ATLAS_DASHBOARD_ALLOWED_HOSTS=atlas.example.com (comma-separated).
+# Any port is fine for loopback names: an SSH tunnel may use any local port.
+LOOPBACK_HOSTNAMES = {"127.0.0.1", "localhost", "[::1]"}
+ALLOWED_HOSTS = {
+    h.strip().lower() for h in os.environ.get("ATLAS_DASHBOARD_ALLOWED_HOSTS", "").split(",") if h.strip()
+}
+
+# Read-only endpoints that run root scripts and scan the filesystem: the UI
+# does not use them, so they need the token like the actions do.
+TOKEN_GET_PATHS = {"/api/doctor", "/api/preflight"}
+ACTION_PATHS = {"/api/actions/backup", "/api/actions/sync", "/api/actions/restore-test"}
+
+# The server is threaded so a 15-minute restore-test doesn't freeze the page,
+# but actions still run one at a time.
+ACTION_LOCK = threading.Lock()
 
 def load_env():
     """Safely parse .env file without executing shell code."""
@@ -120,7 +151,7 @@ def get_registered_apps():
         else:
             apps[app_id] = None
 
-    backup_base = Path("/var/backups")
+    backup_base = backup_root()
     if backup_base.exists():
         try:
             for p in backup_base.iterdir():
@@ -133,7 +164,7 @@ def get_registered_apps():
 
     return apps
 
-KEY_SCAN_DIRS = ["/opt/atlas", "/root", "/home", "/etc", "/var/backups"]
+KEY_SCAN_DIRS = ["/opt/atlas", "/root", "/home", "/etc", "/var/backups"]  # plus backup_root(), added at scan time
 KEY_SCAN_SKIP_DIRS = {".git", "tests", "docs", "node_modules", "__pycache__", "proc", "sys"}
 KEY_SCAN_SKIP_FILES = {"production-preflight", "notify.sh", "restore-offsite.sh", "server.py", "README.md"}
 KEY_SCAN_MAX_BYTES = 64 * 1024  # age identity files are tiny; skip anything larger
@@ -151,7 +182,7 @@ def count_private_keys_on_host():
         return _key_scan_cache["count"]
 
     key_count = 0
-    for sdir in KEY_SCAN_DIRS:
+    for sdir in dict.fromkeys(KEY_SCAN_DIRS + [str(backup_root())]):
         if not os.path.isdir(sdir):
             continue
         for root, dirs, files in os.walk(sdir):
@@ -212,7 +243,8 @@ def get_system_summary():
     env = load_env()
     
     # Disk Usage
-    disk = shutil.disk_usage("/var/backups" if os.path.exists("/var/backups") else "/")
+    root = backup_root()
+    disk = shutil.disk_usage(str(root) if root.exists() else "/")
     disk_total_gb = round(disk.total / (1024 ** 3), 1)
     disk_used_gb = round(disk.used / (1024 ** 3), 1)
     disk_free_gb = round(disk.free / (1024 ** 3), 1)
@@ -318,7 +350,7 @@ def get_backups_list():
     result = {}
 
     for app in apps:
-        app_dir = Path(f"/var/backups/{app}")
+        app_dir = backup_root() / app
         backups = []
         if app_dir.exists():
             for f in sorted(app_dir.glob(f"{app}-*.sql.gz"), reverse=True):
@@ -405,7 +437,7 @@ def get_files_list():
     for app in apps:
         info = config.get(app) if isinstance(config.get(app), dict) else {}
         files_cfg = info.get("files") if isinstance(info.get("files"), dict) else None
-        app_dir = Path(f"/var/backups/{app}")
+        app_dir = backup_root() / app
         archives = []
         if app_dir.exists():
             for f in sorted(app_dir.glob(f"{app}-files-*.tar.gz"), reverse=True):
@@ -532,13 +564,32 @@ class AtlasDashboardHandler(SimpleHTTPRequestHandler):
         
         return True, ""
 
+    def host_allowed(self):
+        host = (self.headers.get("Host") or "").strip().lower()
+        hostname, _, port = host.rpartition(":") if not host.endswith("]") else (host, "", "")
+        if not hostname or not port.isdigit():
+            hostname = host
+        if hostname in LOOPBACK_HOSTNAMES or host in ALLOWED_HOSTS or hostname in ALLOWED_HOSTS:
+            return True
+        self.send_json({"error": "Unknown Host header"}, status=421)
+        return False
+
     def do_OPTIONS(self):
         """Handle preflight requests without wildcard CORS."""
+        if not self.host_allowed():
+            return
         self.send_response(204)
         self.end_headers()
 
     def do_GET(self):
+        if not self.host_allowed():
+            return
         parsed = urlparse(self.path)
+        if parsed.path in TOKEN_GET_PATHS:
+            is_authed, auth_err = self.check_auth()
+            if not is_authed:
+                self.send_json({"error": auth_err}, status=401)
+                return
         if parsed.path == "/api/health":
             self.send_json({"status": "ok", "service": "atlas-dashboard", "host": HOST, "port": PORT})
         elif parsed.path == "/api/status":
@@ -564,8 +615,14 @@ class AtlasDashboardHandler(SimpleHTTPRequestHandler):
             super().do_GET()
 
     def do_POST(self):
+        if not self.host_allowed():
+            return
         parsed = urlparse(self.path)
-        content_length = int(self.headers.get("Content-Length", 0))
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            self.send_json({"error": "Invalid Content-Length"}, status=400)
+            return
         
         if content_length > 1024 * 1024:  # 1MB max body limit
             self.send_json({"error": "Payload too large"}, status=413)
@@ -582,11 +639,23 @@ class AtlasDashboardHandler(SimpleHTTPRequestHandler):
             return
 
         # Enforce authentication for all mutating actions
-        if parsed.path in {"/api/actions/backup", "/api/actions/sync", "/api/actions/restore-test"}:
-            is_authed, auth_err = self.check_auth()
-            if not is_authed:
-                self.send_json({"error": auth_err}, status=401)
-                return
+        if parsed.path not in ACTION_PATHS:
+            self.send_json({"error": "Not Found"}, status=404)
+            return
+        is_authed, auth_err = self.check_auth()
+        if not is_authed:
+            self.send_json({"error": auth_err}, status=401)
+            return
+        if not ACTION_LOCK.acquire(blocking=False):
+            self.send_json({"error": "Another action is still running. Try again when it finishes."}, status=409)
+            return
+        try:
+            self.run_action(parsed.path, req_data)
+        finally:
+            ACTION_LOCK.release()
+
+    def run_action(self, path, req_data):
+        parsed = urlparse(path)
 
         if parsed.path == "/api/actions/backup":
             raw_app = req_data.get("app", "--all")
@@ -655,7 +724,7 @@ def main():
         sys.stderr.write(f"WARNING: dashboard build not found at {PUBLIC_DIR}. Run: cd dashboard/web && npm ci && npm run build\n")
         PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
     server_address = (HOST, PORT)
-    httpd = HTTPServer(server_address, AtlasDashboardHandler)
+    httpd = ThreadingHTTPServer(server_address, AtlasDashboardHandler)
     print(f"==================================================")
     print(f" Atlas V1.1 Production Web Dashboard")
     print(f" Listening on: http://{HOST}:{PORT}")

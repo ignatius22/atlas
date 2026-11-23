@@ -16,7 +16,7 @@ Environment:
   ATLAS_HEARTBEAT_URL         success ping URL (required to send)
   ATLAS_HEARTBEAT_FAIL_URL    failure ping URL (default: <URL>/fail, the healthchecks.io convention)
   ATLAS_HEARTBEAT_SECRET      optional; adds X-Atlas-Signature: sha256=<hmac of body>
-  ATLAS_BACKUP_DIR            default /var/backups
+  ATLAS_BACKUP_DIR            backup directory (default: resolved by atlas_paths.py)
   ATLAS_CONFIG_FILE           apps.yml to report on (default: <atlas>/config/apps.yml).
                               Only configured apps are reported; old folders in the
                               backup directory are ignored. Without a config, every
@@ -232,7 +232,14 @@ def main(argv):
             sys.stderr.write(f"unknown argument {args[i]}\n")
             return 2
 
-    report = build_report(os.environ.get("ATLAS_BACKUP_DIR", "/var/backups"), event, exit_code,
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from atlas_paths import backup_dir
+    try:
+        backups = backup_dir()
+    except Exception as exc:
+        sys.stderr.write(f"heartbeat: {exc}\n")
+        return 2
+    report = build_report(backups, event, exit_code,
                           configured=load_configured_apps())
     if argv[1] == "report":
         print(json.dumps(report, indent=2))

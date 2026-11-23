@@ -43,7 +43,7 @@ Environment Variables:
 Examples:
   $(basename "$0") --app=myapp --list
   $(basename "$0") --app=myapp --key-file=/path/to/key.txt
-  ATLAS_AGE_IDENTITY="AGE-SECRET-KEY-1..." $(basename "$0") --app=shop
+  $(basename "$0") --app=shop --key-file=/root/age-key.txt --target=test
 EOF
 }
 
@@ -154,9 +154,11 @@ if [ "${LIST_ONLY}" = "true" ]; then
 fi
 
 # Step 2: Download Remote Backup to Temporary Working Directory
-RESTORE_WORK_DIR="/tmp/atlas_restore_work_${APP_TARGET}_$$"
-mkdir -p "${RESTORE_WORK_DIR}"
-chmod 700 "${RESTORE_WORK_DIR}"
+# mktemp -d creates a new directory with an unpredictable name, mode 700, and
+# fails if it already exists. A fixed name with mkdir -p would silently reuse a
+# directory another local user created first, and that user (still the owner)
+# could then read the private key and the decrypted dump written into it.
+RESTORE_WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/atlas-restore-${APP_TARGET}.XXXXXXXX")"
 
 cleanup_work_dir() {
   rm -rf "${RESTORE_WORK_DIR}"
@@ -222,9 +224,10 @@ if [[ "${LOCAL_DOWNLOAD_FILE}" == *.age ]]; then
   
   TEMP_KEY_FILE="${RESTORE_WORK_DIR}/temp_identity.key"
   if [ -n "${KEY_FILE}" ] && [ -f "${KEY_FILE}" ]; then
-    cp "${KEY_FILE}" "${TEMP_KEY_FILE}"
+    # umask 077: the copy is private from the moment it exists, not after a chmod.
+    (umask 077 && cp "${KEY_FILE}" "${TEMP_KEY_FILE}")
   elif [ -n "${ATLAS_AGE_IDENTITY:-}" ]; then
-    printf "%s\n" "${ATLAS_AGE_IDENTITY}" > "${TEMP_KEY_FILE}"
+    (umask 077 && printf "%s\n" "${ATLAS_AGE_IDENTITY}" > "${TEMP_KEY_FILE}")
   else
     log_error "Decryption failed: Private key not provided."
     log_error "Provide key via --key-file=PATH or ATLAS_AGE_IDENTITY='AGE-SECRET-KEY-1...'"

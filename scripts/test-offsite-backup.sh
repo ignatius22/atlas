@@ -32,7 +32,7 @@ log_info "Timestamp:   $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 log_info "=================================================="
 
 # Step 1: Verify Local Source Backup Exists
-APP_BACKUP_DIR="/var/backups/${APP_TARGET}"
+APP_BACKUP_DIR="${ATLAS_BACKUP_DIR}/${APP_TARGET}"
 if [ ! -d "${APP_BACKUP_DIR}" ]; then
   log_error "Backup directory '${APP_BACKUP_DIR}' not found."
   exit 1
