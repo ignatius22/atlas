@@ -37,3 +37,7 @@ backups/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Build caches and platform-specific binaries
+*.tsbuildinfo
+*.so
