@@ -121,12 +121,12 @@ fi
 
 # Load global backup defaults
 BACKUP_CONFIG_FILE="$(find_backup_config || true)"
-GLOBAL_BACKUP_DIR="/var/backups"
+# Resolved in common.sh (scripts/lib/atlas_paths.py) so sync, drills and
+# restores read the same directory this script writes to.
+GLOBAL_BACKUP_DIR="${ATLAS_BACKUP_DIR}"
 GLOBAL_RETENTION=14
 
 if [ -n "${BACKUP_CONFIG_FILE}" ] && [ -f "${BACKUP_CONFIG_FILE}" ]; then
-  C_DIR="$(query_yaml "${BACKUP_CONFIG_FILE}" "backup.storage_dir")"
-  if [ -n "${C_DIR}" ] && [ "${C_DIR}" != "null" ]; then GLOBAL_BACKUP_DIR="${C_DIR}"; fi
   C_RET="$(query_yaml "${BACKUP_CONFIG_FILE}" "backup.default_retention_days")"
   if [ -n "${C_RET}" ] && [ "${C_RET}" != "null" ]; then GLOBAL_RETENTION="${C_RET}"; fi
 fi

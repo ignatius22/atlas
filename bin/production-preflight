@@ -153,14 +153,14 @@ done
 # ------------------------------------------------------------------------------
 section_header "3. LOCAL BACKUP INTEGRITY"
 
-if [ -d "/var/backups" ]; then
-  check_pass "Backup directory exists: /var/backups"
+if [ -d "${ATLAS_BACKUP_DIR}" ]; then
+  check_pass "Backup directory exists: ${ATLAS_BACKUP_DIR}"
 else
-  check_fail "Backup directory /var/backups is missing"
+  check_fail "Backup directory ${ATLAS_BACKUP_DIR} is missing"
 fi
 
 for app in ${REGISTERED_APPS}; do
-  latest_backup="$(find "/var/backups/${app}" -name "${app}-*.sql.gz" 2>/dev/null | sort -r | head -n 1 || true)"
+  latest_backup="$(find "${ATLAS_BACKUP_DIR}/${app}" -name "${app}-*.sql.gz" 2>/dev/null | sort -r | head -n 1 || true)"
   if [ -n "${latest_backup}" ] && [ -f "${latest_backup}" ]; then
     if gzip -t "${latest_backup}" 2>/dev/null; then
       check_pass "App '${app}' latest backup passes gzip check: $(basename "${latest_backup}")"
@@ -180,7 +180,7 @@ for app in ${REGISTERED_APPS}; do
       check_warn "App '${app}' missing companion .sha256 file"
     fi
   else
-    check_warn "App '${app}' has no local backups in /var/backups/${app}"
+    check_warn "App '${app}' has no local backups in ${ATLAS_BACKUP_DIR}/${app}"
   fi
 done
 
@@ -196,7 +196,7 @@ else
 fi
 
 # Check for presence of private keys on VPS (Strict Security Invariant)
-KEY_SCAN_COUNT="$(find /opt/atlas /root /home /etc /var/backups -maxdepth 4 -type f ! -path "*/tests/*" ! -path "*/docs/*" ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/__pycache__/*" ! -name "production-preflight" ! -name "notify.sh" ! -name "restore-offsite.sh" ! -name "server.py" ! -name "README.md" ! -name "*.pyc" -exec grep -l "AGE-SECRET-KEY" {} + 2>/dev/null | wc -l || true)"
+KEY_SCAN_COUNT="$(find /opt/atlas /root /home /etc "${ATLAS_BACKUP_DIR}" -maxdepth 4 -type f ! -path "*/tests/*" ! -path "*/docs/*" ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/__pycache__/*" ! -name "production-preflight" ! -name "notify.sh" ! -name "restore-offsite.sh" ! -name "server.py" ! -name "README.md" ! -name "*.pyc" -exec grep -l "AGE-SECRET-KEY" {} + 2>/dev/null | wc -l || true)"
 if [ "${KEY_SCAN_COUNT}" -eq 0 ]; then
   check_pass "Zero-Knowledge Key Boundary: No age private keys found on VPS filesystem"
 else

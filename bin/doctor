@@ -299,7 +299,7 @@ fi
 # ==============================================================================
 print_header "5. BACKUPS & DATA PROTECTION"
 
-BACKUP_STORAGE="/var/backups"
+BACKUP_STORAGE="${ATLAS_BACKUP_DIR}"
 if [ -d "${BACKUP_STORAGE}" ]; then
   record_pass "Backup directory exists: ${BACKUP_STORAGE}"
   

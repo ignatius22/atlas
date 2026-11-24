@@ -300,12 +300,17 @@ EOF_META
         
         # Step 5: Remote Verification Gate
         if [ "${upload_ok}" = "true" ]; then
-          log_info "Verifying remote object existence on Cloud Storage..."
-          if rclone lsf ":s3:${bucket}/${remote_prefix}/${remote_enc_name}" --s3-no-check-bucket 2>/dev/null | grep -q "^${remote_enc_name}$"; then
+          # Existence alone would accept a truncated object, so the stored
+          # size must equal the local ciphertext's, byte for byte.
+          log_info "Verifying remote object size on Cloud Storage..."
+          local uploaded_size=""
+          uploaded_size="$(rclone lsl ":s3:${bucket}/${remote_prefix}/${remote_enc_name}" --s3-no-check-bucket 2>/dev/null | awk 'NR == 1 { print $1 }' || true)"
+          if [ "${uploaded_size}" = "${enc_bytes}" ]; then
+            log_pass "Remote object verified: ${remote_enc_name} (${uploaded_size} bytes)"
             sync_success=true
             break
           else
-            log_warn "Remote verification failed for '${remote_enc_name}' (attempt ${attempt}/${max_attempts})"
+            log_warn "Remote verification failed for '${remote_enc_name}': bucket reports '${uploaded_size:-missing}' bytes, expected ${enc_bytes} (attempt ${attempt}/${max_attempts})"
           fi
         fi
         ;;
@@ -348,11 +353,14 @@ EOF_META
         fi
         
         if [ "${upload_ok}" = "true" ]; then
-          if aws s3 ls "${endpoint_arg[@]}" "s3://${bucket}/${remote_prefix}/${remote_enc_name}" | grep -q "${remote_enc_name}"; then
+          local uploaded_size=""
+          uploaded_size="$(aws s3 ls "${endpoint_arg[@]}" "s3://${bucket}/${remote_prefix}/${remote_enc_name}" 2>/dev/null | awk -v n="${remote_enc_name}" '$4 == n { print $3; exit }' || true)"
+          if [ "${uploaded_size}" = "${enc_bytes}" ]; then
+            log_pass "Remote object verified: ${remote_enc_name} (${uploaded_size} bytes)"
             sync_success=true
             break
           else
-            log_warn "Remote verification failed for '${remote_enc_name}' (attempt ${attempt}/${max_attempts})"
+            log_warn "Remote verification failed for '${remote_enc_name}': bucket reports '${uploaded_size:-missing}' bytes, expected ${enc_bytes} (attempt ${attempt}/${max_attempts})"
           fi
         fi
         ;;
@@ -430,7 +438,7 @@ sync_app_backup() {
   log_info "Starting Off-Site Sync for application: ${app}"
   log_info "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   
-  local app_backup_dir="/var/backups/${app}"
+  local app_backup_dir="${ATLAS_BACKUP_DIR}/${app}"
   
   # Explicit file mode
   if [ -n "${explicit_file}" ]; then

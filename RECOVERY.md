@@ -106,11 +106,13 @@ Atlas restores your data. Getting your apps running again (code, Compose files, 
 
    ```bash
    atlas backup list shop
-   sudo ATLAS_AGE_IDENTITY="AGE-SECRET-KEY-1..." /opt/atlas/scripts/restore-offsite.sh --app=shop --target=test
-   sudo ATLAS_AGE_IDENTITY="AGE-SECRET-KEY-1..." /opt/atlas/scripts/restore-offsite.sh --app=shop --target=production
+   sudo sh -c 'umask 077 && cat > /root/age-key.txt'   # paste the private key, then Ctrl-D
+   sudo /opt/atlas/scripts/restore-offsite.sh --app=shop --key-file=/root/age-key.txt --target=test
+   sudo /opt/atlas/scripts/restore-offsite.sh --app=shop --key-file=/root/age-key.txt --target=production
+   sudo shred -u /root/age-key.txt
    ```
 
-   Use `--key-file=/path/to/key.txt` instead of the variable if you prefer, and `--file=<name>` to pick an older archive. The key is written only to a private temporary file and removed afterwards. Clear your shell history afterwards if you pasted it.
+   Use `--file=<name>` to pick an older archive. Atlas copies the key only into a private temporary directory and removes it afterwards. Avoid `ATLAS_AGE_IDENTITY="AGE-SECRET-KEY-..."` on the command line: it lands in your shell history.
 
 5. **Restore files archives** from the bucket by hand (the offsite restore handles databases only). With the bucket settings from `.env`:
 

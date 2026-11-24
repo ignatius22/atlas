@@ -77,6 +77,15 @@ log_error() {
   printf "${COLOR_RED}[ERROR]${COLOR_RESET} %s\n" "$*" >&2
 }
 
+# Local backup directory, resolved once by scripts/lib/atlas_paths.py (the only
+# place that decides it) and exported so every child script and Python helper
+# agrees. Never hardcode /var/backups in a script: use ${ATLAS_BACKUP_DIR}.
+if ! ATLAS_BACKUP_DIR="$(python3 -I "${ATLAS_LIB_DIR}/atlas_paths.py" backup-dir)"; then
+  log_error "Could not determine the backup directory (see above). Check ATLAS_BACKUP_STORAGE_DIR in .env and backup.storage_dir in config/backup.yml."
+  exit 2
+fi
+export ATLAS_BACKUP_DIR
+
 log_pass() {
   printf "  ${COLOR_GREEN}✓ PASS${COLOR_RESET} %s\n" "$*"
 }

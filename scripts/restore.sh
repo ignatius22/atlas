@@ -37,9 +37,9 @@ Usage:
 Options:
   -a, --app=APP_NAME      Application identifier (e.g. --app=example-app)
   -f, --file=PATH         Path to the gzipped SQL backup archive (.sql.gz)
-                          (Defaults to the latest valid archive in /var/backups/APP_NAME)
+                          (Defaults to the latest valid archive in $ATLAS_BACKUP_DIR/APP_NAME)
   -t, --target=ENV        Target environment: 'test' (default) or 'production'
-  --allow-external-file   Allow restoring a file located outside /var/backups/APP_NAME
+  --allow-external-file   Allow restoring a file located outside $ATLAS_BACKUP_DIR/APP_NAME
   --force                 Bypass interactive confirmation prompt (for automated pipelines)
   -c, --config=PATH       Path to custom apps.yml configuration file
   -h, --help              Show this help message
@@ -136,7 +136,7 @@ if ! is_app_registered "${APP_TARGET}"; then
 fi
 
 # Step 2: Locate & Validate Backup File
-APP_BACKUP_DIR="/var/backups/${APP_TARGET}"
+APP_BACKUP_DIR="${ATLAS_BACKUP_DIR}/${APP_TARGET}"
 
 if [ -z "${BACKUP_FILE}" ]; then
   # Automatically select the latest archive from the application's designated backup directory

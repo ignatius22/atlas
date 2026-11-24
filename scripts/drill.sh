@@ -91,7 +91,7 @@ fi
 drill_files() {
   local app="$1"
   local archive
-  archive="$(find "/var/backups/${app}" -maxdepth 1 -type f -name "${app}-files-*.tar.gz" | sort -r | head -n 1)"
+  archive="$(find "${ATLAS_BACKUP_DIR}/${app}" -maxdepth 1 -type f -name "${app}-files-*.tar.gz" | sort -r | head -n 1)"
   local started
   started="$(date +%s)"
   local work
@@ -141,6 +141,7 @@ PYEOF
 passed=0
 failed=0
 skipped=0
+missing_apps=()
 failed_apps=()
 
 for app in ${apps}; do
@@ -151,11 +152,13 @@ for app in ${apps}; do
   fi
   has_db=false
   has_files=false
-  compgen -G "/var/backups/${app}/${app}-*.sql.gz" > /dev/null && has_db=true
-  compgen -G "/var/backups/${app}/${app}-files-*.tar.gz" > /dev/null && has_files=true
+  compgen -G "${ATLAS_BACKUP_DIR}/${app}/${app}-*.sql.gz" > /dev/null && has_db=true
+  compgen -G "${ATLAS_BACKUP_DIR}/${app}/${app}-files-*.tar.gz" > /dev/null && has_files=true
   if [ "${has_db}" = "false" ] && [ "${has_files}" = "false" ]; then
-    log_warn "Skipping '${app}': no local backups to test yet."
-    skipped=$((skipped + 1))
+    # An app that should have backups but has none is a failure, not a skip:
+    # it usually means backups are being written somewhere else, or not at all.
+    log_error "No backups of '${app}' in ${ATLAS_BACKUP_DIR}/${app}: nothing to verify."
+    missing_apps+=("${app}")
     continue
   fi
 
@@ -183,10 +186,15 @@ for app in ${apps}; do
   fi
 done
 
-log_info "Restore drills finished: ${passed} passed, ${failed} failed, ${skipped} skipped."
+log_info "Restore drills finished: ${passed} passed, ${failed} failed, ${skipped} skipped, ${#missing_apps[@]} with no backups."
 
-if [ "${failed}" -gt 0 ]; then
-  send_atlas_notification "FAILURE" "Atlas Restore Drills Failed" \
+if [ "${#missing_apps[@]}" -gt 0 ]; then
+  send_atlas_notification "FAILURE" "Atlas Restore Drill Found No Backups" \
+    "No backups found in \`${ATLAS_BACKUP_DIR}\` on host \`$(hostname)\` for: ${missing_apps[*]}\nCheck \`journalctl -u atlas-backup.service -n 200 --no-pager\` and the backup directory setting." || true
+fi
+
+if [ "${failed}" -gt 0 ] || [ "${#missing_apps[@]}" -gt 0 ]; then
+  [ "${failed}" -gt 0 ] && send_atlas_notification "FAILURE" "Atlas Restore Drills Failed" \
     "${failed} of $((passed + failed)) restore drills failed on host \`$(hostname)\`: ${failed_apps[*]}\nInspect: \`journalctl -u atlas-drill.service -n 200 --no-pager\`" || true
   exit 1
 fi
